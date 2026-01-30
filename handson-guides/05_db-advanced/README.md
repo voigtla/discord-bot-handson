@@ -291,10 +291,6 @@ node register.js
  * - sqlite3
  * - dotenv
  *
- * .env に以下を設定：
- * - DISCORD_TOKEN=xxxxx
- * - CLIENT_ID=xxxxx
- * - GUILD_ID=xxxxx  (テストに使うDiscordサーバーID)
  */
 
 require("dotenv").config();
@@ -426,11 +422,6 @@ client.login(DISCORD_TOKEN);
  * - discord.js v14
  * - sqlite3
  * - dotenv
- *
- * .env に以下を設定：
- * - DISCORD_TOKEN=xxxxx
- * - CLIENT_ID=xxxxx
- * - GUILD_ID=xxxxx
  */
 
 require("dotenv").config();
