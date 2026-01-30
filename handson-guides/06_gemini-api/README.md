@@ -1,14 +1,17 @@
-# 第6回：Gemini API を使う  
-— ただし自由生成しない —
+# 第6回：AIを「文章整形専用」で使う  
+— 意味を変えずに、整えるだけ —
 
-第6回では、はじめて LLM（Gemini API）を扱います。
+第6回では、はじめて **AI（Gemini API）** を使います。
 
-ただし、この回では  
-**自由な文章生成は行いません。**
+ただし、この回でやることは **とても限定的**です。
 
-Gemini API は、
-**すでに決まっている文章を「整える」ための補助ツール**
-としてのみ使用します。
+- 自由な文章生成はしません
+- 判断・助言・評価はさせません
+- ユーザー入力は AI に渡しません
+
+> **すでに決まっている文章を、  
+> 意味を変えずに少し整える**  
+それだけをやります。
 
 ---
 
@@ -16,77 +19,43 @@ Gemini API は、
 
 この回のゴールは、次の1点です。
 
-> **Gemini API を安全に組み込み、  
-> Bot の返答文を「整形専用」として利用できること**
+> **Botの返答文を AI に通しても、  
+> 意味・内容・立場が一切変わらない**
 
-具体的には：
-
-- Gemini API を呼び出せる
-- ユーザー入力を API に渡していない
-- 新しい文章を生成していない
-- 判断・助言・評価を行っていない
+- 返す情報は同じ
+- 言っていることも同じ
+- ただ少し「読みやすくなる」だけ
 
 ---
 
-## 📘 事前準備（重要）
+## ✅ 先に全体の流れ（迷子防止）
 
-### 1️⃣ Google アカウントが必要です
+今回は、画面を次の3か所で使います。
 
-Gemini API を利用するには  
-**Google アカウントが必須**です。
-
-- 個人の Google アカウントで問題ありません
-- 会社アカウントである必要はありません
-
-👉 この回の前に、  
-**Google アカウントでログインできる状態**にしておいてください。
+1. **ブラウザ**  
+   → Google アカウントで Gemini API を有効化する
+2. **VS Code**  
+   → 新しいファイルを1つ追加する
+3. **Discord**  
+   → Botの返事が変わらないことを確認する
 
 ---
 
-### 2️⃣ Gemini API の有効化（手順）
+## 前提条件（重要）
 
-以下の手順で、Gemini API を有効化します。
+### ソフト・環境
+- 第5回を完了している
+- `/hello` と `/count` が動作している
+- `git_practice` フォルダを継続使用している
+- VS Code でターミナルを開ける
 
-#### 手順①  
-ブラウザで次のページを開きます。
+### アカウント・外部サービス
+- **Google アカウント** を持っている  
+  （個人用でOK / 会社用でなくてOK）
+- Webブラウザで Google にログインできる
 
-https://aistudio.google.com/
-
-#### 手順②  
-Google アカウントでログインします。
-
-#### 手順③  
-画面右上またはメニューから  
-**「Get API key」** または **「API keys」** を選択します。
-
-#### 手順④  
-「Create API key」を押して、APIキーを発行します。
-
-#### 手順⑤  
-表示された APIキーを **コピーして保存**します。
-
-⚠️ このキーは他人に共有しないでください。
-
----
-
-### 3️⃣ APIキーを .env に設定
-
-`.env` ファイルに、次の行を追加します。
-
-```env
-GEMINI_API_KEY=ここにコピーしたAPIキー
-````
-
----
-
-## 前提条件
-
-以下を満たしていることを前提に進めます。
-
-* 第5回を完了している
-* `/hello` と `/count` が動作している
-* Bot の返答文が `responses.js` に集約されている
-* `git_practice` フォルダを継続使用している
+⚠️ クレジットカード登録は **不要**です  
+⚠️ 有料契約は **不要**です
 
 ---
 
@@ -94,117 +63,308 @@ GEMINI_API_KEY=ここにコピーしたAPIキー
 
 この回では、以下は **絶対に行いません**。
 
-* ユーザー入力を Gemini API に渡す
-* 自由な文章生成をさせる
-* 判断・評価・助言を生成させる
-* 感情分析・分類を行う
-* 危険ワードの検知や解釈
+- ユーザー入力を AI に渡す
+- 自由に文章を作らせる
+- 判断・助言・評価をさせる
+- 感情分析・分類
+- 危険ワード検知
 
-**理由：**
-LLM は便利ですが、
-自由に使うと意図しない出力が起きやすいためです。
-
----
-
-## 1️⃣ 第6回での AI の役割
-
-Gemini API の役割は、次の1つだけです。
-
-> **決められた文章を、意味を変えずに整える**
-
-例：
-
-* 文末を自然にする
-* 表記ゆれをなくす
-* 文章を少し読みやすくする
-
-👉 意味を足さない
-👉 判断しない
-👉 励まさない
+**理由：**  
+初学者段階で AI に主導権を渡すと、  
+「何が起きているか分からない」状態になるからです。
 
 ---
 
-## 2️⃣ source 構成（第6回）
+# 1️⃣ Gemini API とは何か（超かんたん）
 
-```
-source/
-├─ index.js          # 既存ファイル（一部修正）
-├─ db.js             # 第5回から変更なし
-├─ responses.js      # 第5回から変更なし
-└─ aiFormatter.js    # ★ 第6回で新規追加
-```
+Gemini API は、
 
----
+> **文章を作ったり、整えたりできる AI を  
+> プログラムから使うための入口**
 
-## 3️⃣ aiFormatter.js の役割
+です。
 
-`aiFormatter.js` は、
-**Gemini API を使った「文章整形専用」モジュール**です。
+今回はその中でも、
 
-* 入力：Bot が決めた文章のみ
-* 出力：意味を変えずに整えた文章
-* ユーザー入力は渡さない
+- ❌ 作る  
+- ❌ 考える  
+- ❌ 判断する  
 
-👉 AI に主導権を渡しません。
+は使いません。
+
+✅ **整える** だけ使います。
 
 ---
 
-## 4️⃣ index.js の変更箇所（重要）
+# 2️⃣ Gemini API を使える状態にする（ブラウザ）
 
-### 変更するのはここだけ
+## 2-1. AI Studio を開く
 
-`interaction.reply()` が複数ありますが、
-**変更するのは次の2か所だけです。**
-
-* `/hello` の正常系
-* `/count` の正常系
-
-エラー時の `interaction.reply` は変更しません。
+### いま開いている画面：ブラウザ
+1. 次のページを開きます  
+   https://aistudio.google.com/
+2. Google アカウントでログインします
 
 ---
 
-### 変更前（第5回）
+## 2-2. APIキーを作成する
 
-```js
-await interaction.reply(responses.hello_ok);
-```
+### いま開いている画面：AI Studio
+1. 画面右上またはメニューから **API keys** を探す
+2. **Create API key** をクリック
+3. 表示されたキーをコピーする
 
-```js
-await interaction.reply(responses.count_result(count));
-```
+⚠️ このキーは **秘密情報**です  
+- チャットに貼らない  
+- READMEに書かない  
+- GitHubに上げない  
 
----
-
-### 変更後（第6回）
-
-```js
-const rawText = responses.hello_ok;
-const formattedText = await formatText(rawText);
-await interaction.reply(formattedText);
-```
-
-```js
-const rawText = responses.count_result(count);
-const formattedText = await formatText(rawText);
-await interaction.reply(formattedText);
-```
+このあと `.env` にだけ入れます。
 
 ---
 
-## 5️⃣ 実行手順
+# 3️⃣ AI専用ファイルを1つ追加する
 
-Gemini API のクライアントライブラリを追加します。
+ここからは **VS Code** に戻ります。
+
+---
+
+## 3-1. ファイル構成（第6回）
+
+第6回では、ファイルが1つ増えます。
+
+```text
+git_practice/
+├─ index.js
+├─ register.js
+├─ aiFormatter.js   ← ★ 新しく追加
+├─ data.db
+├─ .env
+├─ .gitignore
+├─ package.json
+└─ node_modules/
+````
+
+---
+
+## 3-2. Gemini 用ライブラリを入れる
+
+### いま操作している画面：VS Code のターミナル
 
 ```bash
 npm install @google/generative-ai
+```
+
+---
+
+## 3-3. `aiFormatter.js` を作成する
+
+### いま開いている画面：VS Code（エクスプローラー）
+
+* `git_practice` を右クリック
+* **新しいファイル**
+* ファイル名：`aiFormatter.js`
+
+---
+
+## 3-4. `aiFormatter.js`（全文）
+
+**このコードをそのまま貼ってください。**
+
+```js
+/**
+ * aiFormatter.js
+ *
+ * 役割：
+ * - すでに決まっている文章を AI に渡す
+ * - 意味を変えずに、読みやすく整えた文章を返す
+ *
+ * 重要：
+ * - ユーザー入力は渡さない
+ * - 判断・評価・助言をさせない
+ */
+
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+const apiKey = process.env.GEMINI_API_KEY;
+const genAI = new GoogleGenerativeAI(apiKey);
+
+const model = genAI.getGenerativeModel({
+  model: "gemini-pro",
+});
+
+export async function formatText(text) {
+  const prompt = `
+次の文章を、意味を変えずに、丁寧で読みやすい日本語に整えてください。
+内容を足したり、評価したり、助言したりしないでください。
+
+文章：
+${text}
+`;
+
+  const result = await model.generateContent(prompt);
+  const response = result.response;
+  return response.text();
+}
+```
+
+---
+
+# 4️⃣ index.js を AI対応版に差し替える
+
+ここでは **文章を返している部分だけ** を AI に通します。
+
+---
+
+## 4-1. Before（第5回の index.js）
+
+※ 省略せず、**丸ごと差し替え**が前提です。
+（第5回の After をそのまま使っている状態）
+
+---
+
+## 4-2. After（第6回の index.js：AI整形あり）
+
+**このコードを index.js に丸ごと貼り替えてください。**
+
+```js
+/**
+ * 第6回：AIを文章整形専用で使う
+ *
+ * ゴール：
+ * - Botの返答文を AI に通しても意味が変わらない
+ */
+
+require("dotenv").config();
+
+const path = require("path");
+const sqlite3 = require("sqlite3").verbose();
+const { Client, GatewayIntentBits } = require("discord.js");
+const { formatText } = require("./aiFormatter.js");
+
+// ===== SQLite =====
+const dbPath = path.join(__dirname, "data.db");
+const db = new sqlite3.Database(dbPath);
+
+db.serialize(() => {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+});
+
+// ===== Discord =====
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds],
+});
+
+client.once("ready", () => {
+  console.log(`✅ Logged in as ${client.user.tag}`);
+});
+
+// ===== /hello と /count =====
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+
+  if (interaction.commandName === "hello") {
+    const userId = interaction.user.id;
+    const now = new Date().toISOString();
+
+    db.run(
+      `INSERT INTO logs (user_id, created_at) VALUES (?, ?)`,
+      [userId, now],
+      async (err) => {
+        if (err) {
+          await interaction.reply({
+            content: "処理に失敗しました。",
+            ephemeral: true,
+          });
+          return;
+        }
+
+        const rawText = `こんにちは、${interaction.user}！（記録しました）`;
+        const formatted = await formatText(rawText);
+
+        await interaction.reply(formatted);
+      }
+    );
+    return;
+  }
+
+  if (interaction.commandName === "count") {
+    const userId = interaction.user.id;
+
+    db.get(
+      `SELECT COUNT(*) as cnt FROM logs WHERE user_id = ?`,
+      [userId],
+      async (err, row) => {
+        if (err) {
+          await interaction.reply({
+            content: "処理に失敗しました。",
+            ephemeral: true,
+          });
+          return;
+        }
+
+        const rawText = `これまでの記録回数は ${row.cnt} 回です。`;
+        const formatted = await formatText(rawText);
+
+        await interaction.reply(formatted);
+      }
+    );
+  }
+});
+
+// ===== 起動 =====
+client.login(process.env.DISCORD_TOKEN);
+```
+
+---
+
+# 5️⃣ 動作確認
+
+## 5-1. Bot を起動
+
+```bash
 node index.js
 ```
 
 ---
 
-## 6️⃣ Gitでの保存
+## 5-2. Discordで確認
 
-この回の変更も、必ず Git に保存します。
+* `/hello` を実行
+* `/count` を実行
+
+✅ 情報は同じ
+✅ 言い回しだけ少し整っている
+❌ 意味が増えていない
+
+---
+
+# 🔥 よくあるつまずき
+
+## ① AIがエラーになる
+
+* APIキーが設定されていない可能性
+* コピーミスの可能性
+
+👉 `.env` の中身は貼らず、
+👉 エラーメッセージだけ確認
+
+---
+
+## ② 返事が遅い
+
+* AI呼び出しが入るため、少し遅くなります
+* 数秒待ってOK
+
+---
+
+# 6️⃣ Git に保存する
 
 ```bash
 git add .
@@ -214,47 +374,12 @@ git push
 
 ---
 
-## ✅ チェックリスト
+## ✅ この回のチェックリスト
 
-* [ ] Google アカウントで APIキーを取得できた
-* [ ] `.env` に APIキーを設定した
-* [ ] Gemini API が呼び出されている
-* [ ] ユーザー入力を渡していない
-* [ ] 新しい文章を生成していない
-* [ ] Bot の返答の意味が変わっていない
-
----
-
-## 🚧 よくある詰まりポイント
-
-### APIキーが取得できない
-
-→ Google アカウントにログインできているか確認
-→ aistudio.google.com から再度アクセス
-
----
-
-### Gemini API を使っている意味が分からない
-
-→ **安全に組み込めた時点で、この回は成功**
-→ 実務ではこの使い方が一番多い
-
----
-
-### 自由生成したくなる
-
-→ 第6回では禁止
-→ やるなら第7回以降で慎重に設計します
-
----
-
-## 次回予告（第7回）
-
-第7回では、
-**エラーや例外が起きたときの扱い**を扱います。
-
-* Gemini API が落ちたとき
-* DB が壊れたとき
-* 想定外が起きたとき
-
-Bot を「止めない」ための回です。
+* [ ] Google アカウントで Gemini API を有効化した
+* [ ] APIキーを取得した（共有していない）
+* [ ] `aiFormatter.js` を追加した
+* [ ] Bot が起動する
+* [ ] `/hello` と `/count` が動く
+* [ ] AIを使っても意味が変わっていない
+* [ ] commit / push できた

@@ -1,58 +1,72 @@
-# 第7回：エラー処理とフォールバック  
-〜 Botが壊れたときに「変なことを言わない」ために 〜
+# 第7回：エラーが起きても「変なことを言わない」  
+— Botの壊れ方を先に決める —
 
-この回は、**新しい機能を増やしません**。
+第7回では、**新しい機能は増えません**。
 
-その代わりに、
+代わりに、次のことをやります。
 
-> 「何かが失敗したとき、  
-> Botがどう振る舞うか」
+> **何かが失敗したとき、  
+> Botがどう振る舞うかを先に決める**
 
-を決めます。
-
----
-
-## まず最初に（重要）
-
-この回を終えたあと、Botはこうなります。
-
-- Gemini API が止まっても Bot は落ちない
-- DB が一時的に壊れても Bot は黙らない
-- ユーザーにエラー内容を見せない
-- 判断・助言・評価をしないまま安全に終わる
-
-逆に言うと、  
-**これをやらないと、実運用では必ず事故ります。**
+これはとても地味ですが、  
+**実際に運用できるかどうかを分ける重要な回**です。
 
 ---
 
 ## 🎯 この回のゴール
 
-今日のゴールはたった1つです。
+この回のゴールは、次の1点です。
 
-> **「失敗したら、必ず安全な固定文で終わる」Botにする**
+> **エラーが起きても、  
+> Botが必ず「安全な固定文」で終わる**
 
----
-
-## この回でやらないこと
-
-あらかじめ言っておきます。
-
-この回では、次のことは **一切やりません**。
-
-- エラー内容を表示する  
-- 原因をユーザーに説明する  
-- 自動で再試行する  
-- ログを通知する  
-
-理由は単純で、  
-**メンタル系サーバーでは、それ自体が負荷になるから**です。
+- エラー内容をユーザーに見せない
+- 判断・助言・評価をしない
+- Botが落ちない
 
 ---
 
-## 今回の考え方（超重要）
+## ✅ 先に全体の流れ（迷子防止）
 
-Botの処理は、こう流れます。
+今日は次の流れで進みます。
+
+1. 「エラーが起きる場所」を知る  
+2. 失敗したら使う **固定文** を決める  
+3. 失敗処理を1か所にまとめる  
+4. わざと失敗させて、正しい動きを確認する  
+
+---
+
+## 前提条件
+
+以下を満たしていることを前提に進めます。
+
+- 第6回を完了している
+- `/hello` と `/count` が動作している
+- AI（Gemini API）を使っても意味が変わらない状態
+- `git_practice` フォルダを継続使用している
+
+---
+
+## 今回やらないこと（重要）
+
+この回では、以下は **意図的にやりません**。
+
+- エラー内容の詳細表示
+- 原因の説明
+- 自動再試行
+- ログ通知
+- ユーザーへの謝罪文の工夫
+
+**理由：**  
+メンタル系サーバーでは、  
+**エラー説明そのものが負荷になる**ことがあるからです。
+
+---
+
+# 0️⃣ まず考え方を揃える（超重要）
+
+Botの処理は、こう考えます。
 
 ```
 
@@ -60,149 +74,292 @@ Botの処理は、こう流れます。
 ↓
 失敗する
 ↓
-「いまは処理できませんでした」
+安全な一文を返す
 ↓
 終了
 
-```
-
-- 余計なことを言わない  
-- 取り繕わない  
-- 励まさない  
-
-**「安全側に倒す」** だけ。
-
----
-
-## 今回触るファイル
-
-第7回で触るのは、次の4つだけです。
-
-```
-
-source/
-├─ index.js        ← reply の仕方を少し変える
-├─ safeReply.js    ← ★ 新しく追加
-├─ aiFormatter.js  ← try/catch を消す
-└─ responses.js   ← フォールバック文言を追加
-
 ````
 
-※ `db.js` は触りません。
+- 取り繕わない
+- 励まさない
+- 説明しない
+
+**「静かに終わる」** が正解です。
 
 ---
 
-## ① safeReply.js を追加する
+# 1️⃣ エラーが起きやすい場所を知る
 
-まず、新しいファイルを作ります。
+いまの Bot で、失敗しやすいのは主に次の3か所です。
 
-**`source/safeReply.js`**
+1. SQLite（保存・取得）
+2. AI（Gemini API）
+3. Discord への返信
 
-このファイルの役割は1つだけ。
-
-> **どんな失敗が起きても、  
-> ユーザーには安全な文章だけを返す**
-
-（コードは配布ソースをそのまま使ってください）
+👉 これらを **毎回 if / try-catch で書くと事故ります**。
 
 ---
 
-## ② aiFormatter.js を「失敗したら投げる」ようにする
+# 2️⃣ フォールバック用の文章を決める
 
-ここでやることは逆です。
+まず、**失敗したときに必ず使う文章**を決めます。
 
-- エラーを捕まえない
-- 握りつぶさない
-- そのまま throw する
+## 2-1. responses.js を新しく作る
 
-**なぜ？**
+### いま開いている画面：VS Code（エクスプローラー）
 
-→ エラー処理は  
-`safeReply` に全部集めたいから。
+- `git_practice` を右クリック
+- **新しいファイル**
+- ファイル名：`responses.js`
 
 ---
 
-## ③ index.js の reply を包む
-
-ここが一番大事です。
-
-### 変更前（第6回まで）
+## 2-2. responses.js（全文）
 
 ```js
-await interaction.reply(text);
+/**
+ * responses.js
+ *
+ * Botが「言っていいこと」だけを集めたファイル
+ * エラー時の文章もここに置く
+ */
+
+module.exports = {
+  fallback:
+    "いまは処理できませんでした。時間をおいて、また試してください。",
+};
 ````
 
-### 変更後（第7回）
+ポイント：
 
-```js
-await safeReply(interaction, async () => {
-  return await formatText(text);
-});
-```
-
-意味はこれだけです。
-
-> 「失敗したら、自分で処理せず safeReply に任せる」
-
----
-
-## ④ responses.js にフォールバック文言を足す
-
-何かが壊れたとき、
-**Botが必ず言う文章**を決めます。
-
-例：
-
-```js
-fallback: "いまは処理できませんでした。時間をおいて、また試してください。",
-```
-
-* 判断しない
-* 理由を説明しない
+* 理由を書かない
 * 感情を煽らない
+* 次の行動を指示しない
 
 ---
 
-## 動作確認のしかた（重要）
+# 3️⃣ 失敗処理をまとめる（safeReply.js）
 
-ちゃんとできたか、必ず確認します。
+次に、**失敗したら必ずこの文章を返す**仕組みを作ります。
 
-### テスト手順
+---
+
+## 3-1. safeReply.js を作成する
+
+### いま開いている画面：VS Code（エクスプローラー）
+
+* 新しいファイル
+* ファイル名：`safeReply.js`
+
+---
+
+## 3-2. safeReply.js（全文）
+
+```js
+/**
+ * safeReply.js
+ *
+ * 役割：
+ * - 中で何が失敗しても
+ * - ユーザーには安全な固定文だけを返す
+ */
+
+const { fallback } = require("./responses.js");
+
+module.exports = async function safeReply(interaction, handler) {
+  try {
+    const result = await handler();
+    return result;
+  } catch (err) {
+    console.error("❌ エラー発生:", err);
+
+    if (interaction.replied || interaction.deferred) return;
+
+    await interaction.reply({
+      content: fallback,
+      ephemeral: true,
+    });
+  }
+};
+```
+
+👉 これで
+**「失敗時の振る舞い」は1か所に集まりました。**
+
+---
+
+# 4️⃣ index.js を安全版に差し替える
+
+ここから **index.js を丸ごと差し替え**ます。
+
+---
+
+## 4-1. Before（第6回までの index.js）
+
+※ 第6回で使っていた AI 整形あり版
+
+---
+
+## 4-2. After（第7回の index.js：安全版）
+
+**このコードを index.js に丸ごと貼り替えてください。**
+
+```js
+require("dotenv").config();
+
+const path = require("path");
+const sqlite3 = require("sqlite3").verbose();
+const { Client, GatewayIntentBits } = require("discord.js");
+
+const { formatText } = require("./aiFormatter.js");
+const safeReply = require("./safeReply.js");
+
+// ===== SQLite =====
+const dbPath = path.join(__dirname, "data.db");
+const db = new sqlite3.Database(dbPath);
+
+db.serialize(() => {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+});
+
+// ===== Discord =====
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds],
+});
+
+client.once("ready", () => {
+  console.log(`✅ Logged in as ${client.user.tag}`);
+});
+
+// ===== /hello と /count（safeReply で包む） =====
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+
+  // ---- /hello ----
+  if (interaction.commandName === "hello") {
+    await safeReply(interaction, async () => {
+      const userId = interaction.user.id;
+      const now = new Date().toISOString();
+
+      await new Promise((resolve, reject) => {
+        db.run(
+          `INSERT INTO logs (user_id, created_at) VALUES (?, ?)`,
+          [userId, now],
+          (err) => {
+            if (err) reject(err);
+            else resolve();
+          }
+        );
+      });
+
+      const rawText = `こんにちは、${interaction.user}！（記録しました）`;
+      const formatted = await formatText(rawText);
+
+      await interaction.reply(formatted);
+    });
+    return;
+  }
+
+  // ---- /count ----
+  if (interaction.commandName === "count") {
+    await safeReply(interaction, async () => {
+      const userId = interaction.user.id;
+
+      const count = await new Promise((resolve, reject) => {
+        db.get(
+          `SELECT COUNT(*) as cnt FROM logs WHERE user_id = ?`,
+          [userId],
+          (err, row) => {
+            if (err) reject(err);
+            else resolve(row.cnt);
+          }
+        );
+      });
+
+      const rawText = `これまでの記録回数は ${count} 回です。`;
+      const formatted = await formatText(rawText);
+
+      await interaction.reply(formatted);
+    });
+  }
+});
+
+// ===== 起動 =====
+client.login(process.env.DISCORD_TOKEN);
+```
+
+---
+
+# 5️⃣ わざと失敗させて確認する（重要）
+
+**成功だけ確認しても意味がありません。**
+
+---
+
+## 5-1. テスト手順
 
 1. Bot を起動する
-2. `/hello` や `/count` を実行（正常）
-3. `.env` の `GEMINI_API_KEY` を一時的に消す
-4. もう一度コマンドを実行
-
-### 正解の挙動
-
-* Bot が落ちない
-* 固定のフォールバック文言が返る
-* エラー詳細は表示されない
+2. `/hello` を1回実行（成功）
+3. `.env` の **AI用キーを一時的に消す**
+4. Bot を再起動
+5. `/hello` または `/count` を実行
 
 ---
 
-## この回で得られるもの
+## 5-2. 正しい挙動
 
-この回を終えると、
+* Bot は落ちない
+* エラー内容は表示されない
+* 固定文が返る
 
-* AIを使っても怖くなくなる
-* 「失敗前提」の設計ができるようになる
-* 実運用に耐える Bot になる
+```
+いまは処理できませんでした。時間をおいて、また試してください。
+```
+
+これが出れば **合格**です。
 
 ---
 
-## 次回（第8回）
+# 🔥 よくあるつまずき
 
-次はコードをほとんど書きません。
+## ① 何も返ってこない
 
-第8回では、
+* Botがすでに reply 済みの可能性
+* 二重 reply になっている可能性
 
-* やってはいけない実装
-* 善意で事故るパターン
-* ルールをコードに戻す考え方
+👉 safeReply があるか確認
 
-を扱います。
+---
 
-**「作れる」と「やっていい」は違う**
-を、はっきり分ける回です。
+## ② エラーが見えなくて不安
+
+* エラーは **ターミナルにだけ出ます**
+* ユーザーに見せない設計です
+
+---
+
+# 6️⃣ Git に保存する
+
+```bash
+git add .
+git commit -m "add safe fallback for errors"
+git push
+```
+
+---
+
+## ✅ この回のチェックリスト
+
+* [ ] responses.js を作成した
+* [ ] safeReply.js を作成した
+* [ ] index.js を安全版に差し替えた
+* [ ] エラー時に固定文が返る
+* [ ] エラー内容がユーザーに出ない
+* [ ] Botが落ちない
+* [ ] commit / push できた

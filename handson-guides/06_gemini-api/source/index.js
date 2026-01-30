@@ -1,115 +1,92 @@
 /**
- * 第5回：/hello（保存） + /count（件数表示）
+ * 第6回：AIを文章整形専用で使う
  *
- * 重要：
- * - /count は「事実だけ」を返す（評価しない）
- * - 他ユーザーの情報は扱わない
- *
- * .env 必須：
- * - DISCORD_TOKEN
- * - CLIENT_ID
- * - GUILD_ID
+ * ゴール：
+ * - Botの返答文を AI に通しても意味が変わらない
  */
 
 require("dotenv").config();
 
-const {
-    Client,
-    GatewayIntentBits,
-    REST,
-    Routes,
-    SlashCommandBuilder,
-} = require("discord.js");
+const path = require("path");
+const sqlite3 = require("sqlite3").verbose();
+const { Client, GatewayIntentBits } = require("discord.js");
+const { formatText } = require("./aiFormatter.js");
 
-const { formatText } = require("./aiFormatter");
-const { saveLog, countLogsByUser } = require("./db");
-const responses = require("./responses");
+// ===== SQLite =====
+const dbPath = path.join(__dirname, "data.db");
+const db = new sqlite3.Database(dbPath);
 
-// ===== 環境変数チェック =====
-const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
+db.serialize(() => {
+    db.run(`
+    CREATE TABLE IF NOT EXISTS logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+});
 
-if (!DISCORD_TOKEN || !CLIENT_ID || !GUILD_ID) {
-    console.error("❌ .env が不足しています。DISCORD_TOKEN / CLIENT_ID / GUILD_ID を設定してください。");
-    process.exit(1);
-}
-
-// ===== Discord クライアント =====
+// ===== Discord =====
 const client = new Client({
     intents: [GatewayIntentBits.Guilds],
 });
 
-// ===== コマンド定義（第5回：hello + count）=====
-const commands = [
-    new SlashCommandBuilder()
-        .setName("hello")
-        .setDescription("挨拶して、DBに記録します")
-        .toJSON(),
-    new SlashCommandBuilder()
-        .setName("count")
-        .setDescription("自分の記録回数（事実のみ）を表示します")
-        .toJSON(),
-];
-
-// ===== ギルドコマンド登録（反映が速い）=====
-async function registerCommands() {
-    const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
-    console.log("🔄 スラッシュコマンド登録中...");
-    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), {
-        body: commands,
-    });
-    console.log("✅ スラッシュコマンド登録完了");
-}
-
-client.once("ready", async () => {
+client.once("ready", () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
-    try {
-        await registerCommands();
-    } catch (err) {
-        console.error("❌ コマンド登録に失敗:", err);
-        process.exit(1);
-    }
 });
 
-// ===== コマンド処理 =====
+// ===== /hello と /count =====
 client.on("interactionCreate", async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
 
-    const userId = interaction.user.id;
-    const now = new Date().toISOString();
+    if (interaction.commandName === "hello") {
+        const userId = interaction.user.id;
+        const now = new Date().toISOString();
 
-    try {
-        // /hello：保存して、文章を整形して返す
-        if (interaction.commandName === "hello") {
-            await saveLog(userId, now);
+        db.run(
+            `INSERT INTO logs (user_id, created_at) VALUES (?, ?)`,
+            [userId, now],
+            async (err) => {
+                if (err) {
+                    await interaction.reply({
+                        content: "処理に失敗しました。",
+                        ephemeral: true,
+                    });
+                    return;
+                }
 
-            const rawText = responses.hello_ok;
-            const formattedText = await formatText(rawText);
+                const rawText = `こんにちは、${interaction.user}！（記録しました）`;
+                const formatted = await formatText(rawText);
 
-            await interaction.reply(formattedText);
-            return;
-        }
+                await interaction.reply(formatted);
+            }
+        );
+        return;
+    }
 
-        // /count：件数を取得して、文章を整形して返す（評価しない）
-        if (interaction.commandName === "count") {
-            const count = await countLogsByUser(userId);
+    if (interaction.commandName === "count") {
+        const userId = interaction.user.id;
 
-            const rawText = responses.count_result(count);
-            const formattedText = await formatText(rawText);
+        db.get(
+            `SELECT COUNT(*) as cnt FROM logs WHERE user_id = ?`,
+            [userId],
+            async (err, row) => {
+                if (err) {
+                    await interaction.reply({
+                        content: "処理に失敗しました。",
+                        ephemeral: true,
+                    });
+                    return;
+                }
 
-            await interaction.reply(formattedText);
-            return;
-        }
+                const rawText = `これまでの記録回数は ${row.cnt} 回です。`;
+                const formatted = await formatText(rawText);
 
-    } catch (err) {
-        console.error("❌ エラー:", err);
-        // 第5回では詳細なエラーハンドリングはやりすぎない
-        await interaction.reply({
-            content: responses.restricted,
-            ephemeral: true,
-        });
+                await interaction.reply(formatted);
+            }
+        );
     }
 });
 
-client.login(DISCORD_TOKEN);
+// ===== 起動 =====
+client.login(process.env.DISCORD_TOKEN);

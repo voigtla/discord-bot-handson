@@ -1,28 +1,34 @@
 /**
- * 第6回：Gemini API を使った文章整形専用モジュール
- * - 意味を変えない
- * - 判断・助言をさせない
- * - 自由生成しない
+ * aiFormatter.js
+ *
+ * 役割：
+ * - すでに決まっている文章を AI に渡す
+ * - 意味を変えずに、読みやすく整えた文章を返す
+ *
+ * 重要：
+ * - ユーザー入力は渡さない
+ * - 判断・評価・助言をさせない
  */
 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const apiKey = process.env.GEMINI_API_KEY;
+const genAI = new GoogleGenerativeAI(apiKey);
 
-async function formatText(text) {
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+const model = genAI.getGenerativeModel({
+    model: "gemini-pro",
+});
 
+export async function formatText(text) {
     const prompt = `
-以下の文章の意味を一切変えず、
-判断・助言・評価を追加せずに、
-表現だけを自然に整えてください。
+次の文章を、意味を変えずに、丁寧で読みやすい日本語に整えてください。
+内容を足したり、評価したり、助言したりしないでください。
 
 文章：
-「${text}」
+${text}
 `;
 
     const result = await model.generateContent(prompt);
-    return result.response.text().trim();
+    const response = result.response;
+    return response.text();
 }
-
-module.exports = { formatText };
