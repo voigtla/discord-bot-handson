@@ -1,23 +1,17 @@
 /**
- * register.js
- *
- * Discord にスラッシュコマンドを登録するためのスクリプト
+ * register.js（第5回）
  *
  * 役割：
- * - /hello コマンドを Discord サーバーに登録する
+ * - /hello と /count を Discord サーバーに登録する
  *
  * 注意：
  * - Botを起動するファイルではない
- * - コマンド定義を変更したときだけ実行すればOK
+ * - コマンド定義を変えたときだけ実行すればOK
  */
 
 require("dotenv").config();
 
-const {
-    REST,
-    Routes,
-    SlashCommandBuilder,
-} = require("discord.js");
+const { REST, Routes, SlashCommandBuilder } = require("discord.js");
 
 // ===== 1) 環境変数チェック =====
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
@@ -36,7 +30,12 @@ if (!DISCORD_TOKEN || !CLIENT_ID || !GUILD_ID) {
 const commands = [
     new SlashCommandBuilder()
         .setName("hello")
-        .setDescription("挨拶する")
+        .setDescription("挨拶して、DBに記録します")
+        .toJSON(),
+
+    new SlashCommandBuilder()
+        .setName("count")
+        .setDescription("自分の記録回数を表示します（評価しません）")
         .toJSON(),
 ];
 
@@ -47,10 +46,9 @@ const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
     try {
         console.log("🔄 スラッシュコマンド登録中...");
 
-        await rest.put(
-            Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-            { body: commands }
-        );
+        await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), {
+            body: commands,
+        });
 
         console.log("✅ スラッシュコマンド登録完了");
     } catch (error) {
