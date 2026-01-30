@@ -17,7 +17,7 @@
 | 1 | **2025/01/17** | **開発環境セットアップ** | [📄](handson-guides/01_environment-setup/) | - |
 | 2 | **2025/01/30** | **Git/GitHub基礎（ハンズオン）** | [📄](handson-guides/02_git-practice/) | - |
 | 3 | 未定 | **Bot導入＋SQLiteで「1つだけ覚える」** | [📄](handson-guides/03_bot-sqlite/) | [💾](handson-guides/03_bot-sqlite/source/) |
-| 4 | 未定 | メンタル系Botとしての最小実装 | [📄](handson-guides/04_mental-bot-basic/) | - |
+| 4 | 未定 | **メンタル系Botとしての最小実装** | [📄](handson-guides/04_mental-bot-basic/) | [💾](handson-guides/04_mental-bot-basic/source/) | 
 | 5 | 未定 | DBを使った「意味のある返答」 | [📄](handson-guides/05_db-advanced/) | - |
 | 6 | 未定 | Gemini API で「優しい返答」を自動生成 | [📄](handson-guides/06_gemini-api/) | - |
 | 7 | 未定 | エラー処理・リトライ・ログ設計 | [📄](handson-guides/07_error-handling/) | - |
