@@ -1,19 +1,14 @@
-了解。
-では **第4回の完成版 README.md（このまま配置・配布できる確定稿）**を出します。
-※ 余分な設計メモや注釈はすべて落とし、**参加者に渡して破綻しない文面**にしています
-※ source（`index.js / db.js / responses.js`）前提で完全に整合しています
+# 第4回：Botに「記憶」を持たせる（SQLite 超入門・段階追加）
+— 第3回のBotに「保存」を1つだけ足す —
 
----
+この回では、**第3回で動いたBotに、機能を1つだけ追加**します。
 
-```md
-# 第4回：メンタル系Botの最小構成  
-— 運用ルールをコードに落とす —
+- 賢くしません
+- 評価しません
+- 便利にもしません
 
-第4回では、第3回で作成した Bot を  
-**メンタル系サーバーの運用ルールに適合する形に整えます。**
-
-この回では、新しい機能は増やしません。  
-**「やってよいこと／やってはいけないこと」を、コード構造で固定する回**です。
+**「/hello を実行したら、1件だけ保存される」**  
+それだけで合格です。
 
 ---
 
@@ -21,38 +16,36 @@
 
 この回のゴールは、次の1点です。
 
-> **Bot の振る舞いが、運用ルールに照らして安全であると説明できる状態になること**
+> **`/hello` を実行するたびに、  
+> `data.db` に user_id と時刻が1件保存される**
 
-具体的には：
-
-- Botが判断・断定・助言をしない
-- 返答が固定テンプレのみになっている
-- 保存するデータが最小限である
-- 第3回より構造が整理されている
+- DBの中身を読めなくてもOK
+- 画面が地味でもOK
+- **増えていれば合格**
 
 ---
 
-## 📘 前提：開発部運用ルール
+## ✅ 先に全体の流れ（迷子防止）
 
-この回は、以下の運用ルールを前提としています。
+今日は VS Code だけで完結します。
 
-- AIは思考を補助するツールであり、判断主体にならない
-- 共感・受容は行うが、評価・指示はしない
-- 個人状態の可視化・比較を行わない
-- データは最小限のみ扱う
-
-**この回では、これらを「文章」ではなく「実装」で守ります。**
+1. SQLite 用ライブラリを入れる  
+2. `/hello` したときに保存する「入れ物」を作る（data.db）  
+3. 第3回の `index.js` を **保存あり版** に差し替える  
+4. `/hello` を何回か実行し、保存が増えることを確認する  
+5. Git に保存する（commit / push）
 
 ---
 
 ## 前提条件
 
-以下を満たしていることを前提に進めます。
-
 - 第3回を完了している
-- `/hello` コマンドが動作している
-- SQLite にログが保存されている
-- `git_practice` フォルダを継続使用している
+- Bot が起動できる（`node index.js`）
+- Discordで `/hello` が返事する
+- `.env` に以下が設定済み（内容は共有しない）
+  - `DISCORD_TOKEN`
+  - `CLIENT_ID`
+  - `GUILD_ID`
 
 ---
 
@@ -60,157 +53,317 @@
 
 この回では、以下は **意図的に行いません**。
 
-- 新しい DB テーブルの追加
-- 入力内容の分析・分類
-- 感情スコアリング
-- LLM / Gemini API の利用
-- 危険ワードの自動検知
+- 保存したデータを読み出す（COUNTなど）
+- 複雑なDB設計（複数テーブル）
+- エラー処理の作り込み
+- AI / Gemini API
+- 「役に立つ分析」や「励まし」
 
 **理由：**  
-「できる」ことよりも  
-**「やらないと決める」ことが安全設計だからです。**
+まずは **「保存できる」ことだけ**を確実に成功させるためです。
 
 ---
 
-## 1️⃣ 第3回からの変更点
+# 1️⃣ SQLite とは何か（超かんたん）
 
-### 第3回
-- 1ファイル構成
-- 返信は固定文1種類
-- 技術中心の回
+SQLite は、
 
-### 第4回
-- ファイルを分割する
-- 返信文をテンプレ化する
-- 運用ルール中心の回
+> **ファイル1個で動くデータベース**です。
 
-**機能は増えていません。構造だけを変えます。**
+- サーバー不要
+- 設定不要
+- `data.db` というファイルができるだけ
+
+👉 このハンズオンでは「記録用メモ帳」くらいに思ってOKです。
 
 ---
 
-## 2️⃣ 今回の source 構成
+# 2️⃣ SQLite 用ライブラリを入れる
 
-```
+## いま開いている画面：VS Code
+下の **ターミナル** を開いて実行します。
 
-source/
-├─ index.js        # エントリーポイント（つなぐだけ）
-├─ db.js           # DB操作（保存のみ）
-└─ responses.js    # Botが返してよい文言だけを定義
+### 2-1. sqlite3 をインストール
 
+```bash
+npm install sqlite3
 ````
 
-この分割が、第4回の中心テーマです。
+✅ 成功の目印
+
+* エラーが出なければOK（警告が出ても大体OK）
+* `node_modules` が増える（見なくてOK）
 
 ---
 
-## 3️⃣ responses.js（重要）
+# 3️⃣ 第3回の index.js を「保存あり版」に差し替える
 
-`responses.js` には、  
-**Botが返してよい文言だけ**を書きます。
+ここからが本番です。
+**第3回の index.js を丸ごと置き換えます。**
+
+* ✅ Before：第3回（DBなし）版
+* ✅ After：第4回（SQLite保存あり）版
+
+---
+
+## 3-1. Before（第3回の index.js：DBなし版）
+
+**いまの index.js がこの形（または近い形）になっている前提です。**
+もし違っていても大丈夫ですが、いったん「第3回の正」として置いておきます。
 
 ```js
-module.exports = {
-  normal: "記録しました。教えてくれてありがとう。",
-  restricted: "ここでは判断や助言は行いません。",
-};
-````
+import { Client, GatewayIntentBits, Events } from "discord.js";
+import "dotenv/config";
 
-### このファイルの役割
+const client = new Client({
+    intents: [GatewayIntentBits.Guilds],
+});
 
-* 表現ルールを1か所に集約する
-* index.js に自由な文章を書かせない
-* レビューしやすくする
+client.once(Events.ClientReady, () => {
+    console.log("Bot is ready");
+});
 
-👉 **運用ルールをコードで守るための層**です。
+client.on(Events.InteractionCreate, async (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
 
----
+    if (interaction.commandName === "hello") {
+        await interaction.reply("こんにちは！");
+    }
+});
 
-## 4️⃣ db.js（第3回からの整理）
-
-`db.js` では、
-**保存処理だけ**を扱います。
-
-* データ取得はしない
-* 集計はしない
-* 判断はしない
-
-DBの内容は第3回と同じです。
-この回では **整理のみ**行います。
+client.login(process.env.DISCORD_TOKEN);
+```
 
 ---
 
-## 5️⃣ index.js の役割
+## 3-2. After（第4回の index.js：SQLite 保存あり版）
 
-`index.js` は、
-**処理をつなぐだけ**のファイルです。
+**このブロックを、そのまま index.js に丸ごと貼り替えてください。**
 
-* コマンドを受け取る
-* DBに保存する
-* responses から文を選んで返す
+```js
+/**
+ * 第4回：Botに「記憶」を持たせる（SQLite）
+ *
+ * ゴール：
+ * - /hello を実行したら
+ *   - user_id と時刻を SQLite に1件保存
+ *   - 固定文で返信（メンション付き）
+ *
+ * 前提：
+ * - discord.js v14
+ * - sqlite3
+ * - dotenv
+ */
 
-ここに文章を書き始めたら、
-この回の目的から外れています。
+require("dotenv").config();
+
+const path = require("path");
+const sqlite3 = require("sqlite3").verbose();
+
+const {
+  Client,
+  GatewayIntentBits,
+  REST,
+  Routes,
+  SlashCommandBuilder,
+} = require("discord.js");
+
+// ===== 1) 環境変数チェック（初学者が詰まるので最初に止める） =====
+const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
+
+if (!DISCORD_TOKEN || !CLIENT_ID || !GUILD_ID) {
+  console.error("❌ .env が不足しています。以下を設定してください：");
+  console.error("- DISCORD_TOKEN");
+  console.error("- CLIENT_ID");
+  console.error("- GUILD_ID");
+  process.exit(1);
+}
+
+// ===== 2) SQLite セットアップ（ファイル1個でOK） =====
+// data.db は「保存先のファイル」。
+// なければ自動で作られます。
+const dbPath = path.join(__dirname, "data.db");
+const db = new sqlite3.Database(dbPath);
+
+// テーブル（保存先の表）を作る：なければ作成、あればそのまま
+db.serialize(() => {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+});
+
+// ===== 3) Discord クライアント（スラッシュコマンドだけならGuildsでOK） =====
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds],
+});
+
+// ===== 4) /hello コマンド定義 =====
+const commands = [
+  new SlashCommandBuilder()
+    .setName("hello")
+    .setDescription("挨拶して、DBに記録します")
+    .toJSON(),
+];
+
+// ===== 5) コマンド登録（ギルド登録：反映が速くて事故りにくい） =====
+async function registerCommands() {
+  const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
+
+  console.log("🔄 スラッシュコマンド登録中...");
+  await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), {
+    body: commands,
+  });
+  console.log("✅ スラッシュコマンド登録完了");
+}
+
+client.once("ready", async () => {
+  console.log(`✅ Logged in as ${client.user.tag}`);
+
+  try {
+    await registerCommands();
+  } catch (err) {
+    console.error("❌ コマンド登録に失敗:", err);
+    process.exit(1);
+  }
+});
+
+// ===== 6) /hello 受信 → DB保存 → 返信 =====
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+  if (interaction.commandName !== "hello") return;
+
+  // ここで「誰が実行したか」を取る
+  const userId = interaction.user.id;
+
+  // ここで「いつ実行したか」を取る
+  const now = new Date().toISOString();
+
+  // DBに1件保存する
+  db.run(
+    `INSERT INTO logs (user_id, created_at) VALUES (?, ?)`,
+    [userId, now],
+    async (err) => {
+      if (err) {
+        console.error("❌ DB保存エラー:", err);
+        await interaction.reply({
+          content: "DBへの保存に失敗しました（ターミナルのログを確認してください）",
+          ephemeral: true,
+        });
+        return;
+      }
+
+      // 保存できたら返信する（メンション付き）
+      await interaction.reply(`こんにちは、${interaction.user}！（記録しました）`);
+    }
+  );
+});
+
+// ===== 7) 起動 =====
+client.login(DISCORD_TOKEN);
+```
 
 ---
 
-## 6️⃣ Gitでの保存（必須）
+# 4️⃣ 動作確認（/hello を3回やる）
 
-この回の変更も、必ず Git に保存します。
+## 4-1. Bot を起動する
+
+### いま操作している画面：VS Code のターミナル
+
+```bash
+node index.js
+```
+
+✅ 成功の目印
+
+* `✅ Logged in as ...` が出る
+* `✅ スラッシュコマンド登録完了` が出る
+
+---
+
+## 4-2. Discordで /hello を3回実行する
+
+### いま開いている画面：Discord（テキストチャンネル）
+
+1. `/hello` を実行
+2. もう一回 `/hello`
+3. さらにもう一回 `/hello`
+
+✅ 返信に `（記録しました）` が付いていればOK
+
+---
+
+# 5️⃣ `data.db` ができたか確認する
+
+SQLite は **ファイルができれば勝ち**です。
+
+### いま開いている画面：VS Code（エクスプローラー）
+
+* `git_practice` の中に **`data.db`** ができているか確認
+
+✅ あれば成功
+👉 中身を開く必要はありません
+
+---
+
+# 🔥 よくあるつまずき（先回り）
+
+## ① `data.db` が見つからない
+
+* Bot を起動していない
+* 起動したがすぐ止めた
+* 実行したフォルダが違う
+
+✅ まず `node index.js` を実行して、`/hello` を1回叩く
+
+---
+
+## ② `/hello` が反応しない
+
+* Bot が落ちている
+* 違うサーバーに向けて登録している（GUILD_ID違い）
+
+✅ ターミナルにエラーが出ていないか見る
+✅ `.env` の `GUILD_ID` が「今叩いているサーバー」か確認（貼らない）
+
+---
+
+## ③ `sqlite3` のインストールで止まる
+
+* 環境によってはビルドが走り、時間がかかることがあります
+
+✅ まずはエラーメッセージをそのまま貼ればOK（.env は貼らない）
+
+---
+
+# 6️⃣ Git に保存する（必須）
+
+この回の変更を **必ず commit/push** します。
+
+### いま操作している画面：VS Code のターミナル
 
 ```bash
 git add .
-git commit -m "separate responses and restrict bot behavior"
+git commit -m "save hello logs to sqlite"
 git push
 ```
 
-**振る舞いの制限も、コードとして履歴に残します。**
+⚠️ 今回は `data.db` もコミットしてOKです
+（次回以降で「コミットしない運用」に変えていきます）
 
 ---
 
-## ✅ チェックリスト
+## ✅ この回のチェックリスト
 
-* [ ] ファイルが3つに分かれている
-* [ ] index.js に文章が書かれていない
-* [ ] responses.js に文言が集約されている
-* [ ] 保存処理が壊れていない
-* [ ] Botが判断・助言をしていない
-* [ ] Git に commit されている
-
-すべて満たせば、この回は成功です。
-
----
-
-## 🚧 よくある詰まりポイント
-
-### ファイル分割の意味が分からない
-
-→ この回では「正解を覚える」必要はありません
-→ **役割を分けると安全になる**と分かれば十分です
-
----
-
-### 返答が地味すぎる気がする
-
-→ **それで正解**です
-→ メンタル系Botは「目立たない」ことが価値です
-
----
-
-### 危険ワードを検知しなくていいの？
-
-→ 過剰反応が事故につながるため
-→ この回では **「扱わない」ことを選びます**
-
----
-
-## 次回予告（第5回）
-
-第5回では、
-**保存したデータを「使う」**ことを始めます。
-
-* DBから読み出す
-* ただし評価・比較はしない
-* 「回数」「期間」など、解釈を伴わない形に留める
-
-運用ルールを守ったまま、
-Botに一段だけ意味を持たせます。
+* [ ] `npm install sqlite3` ができた
+* [ ] `index.js` を After 版に差し替えた
+* [ ] Bot が起動できた
+* [ ] `/hello` で「記録しました」が返る
+* [ ] `data.db` が作成された
+* [ ] commit / push できた
