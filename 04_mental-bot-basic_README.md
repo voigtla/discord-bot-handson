@@ -273,56 +273,114 @@ Discord で試してください：
 
 ### 3-1. 基本的な集計処理
 
-`index.js` の `client.on('interactionCreate', ...)` に `/count` の処理を追加：
+了解。いまの文章は「どこに何を足すのか」「前提として何が必要なのか」が省略されていて、初学者だと迷子になります。
+同じ内容を、**作業が迷わない順番**に書き換えます（コードも“貼る場所”がわかるようにします）。
 
-```javascript
+---
+
+## 3-1. `/count` の基本集計を追加（どこに入れるかが分かる版）
+
+### この章でやること
+
+`/count` が実行されたときに、次を返します。
+
+* 📊 総記録数（これまで何回記録したか）
+* 📅 今日の記録数（今日だけで何回記録したか）
+* 🕒 最新の記録（最後に記録した気分と経過時間）
+* 📝 メモがあれば表示
+
+---
+
+### 前提チェック（ここが抜けていると動きません）
+
+* DBに **`feelings` テーブル**が作られていること
+  （`messages` ではなく `feelings` を参照しています）
+* `getTimeDiff()` 関数が **どこかに定義されていること**
+  （このコードは `getTimeDiff(latest.created_at)` を呼びます）
+
+> もしこの2つがまだなら、先に「feelingsテーブル作成」と「getTimeDiffの追加」を入れる必要があります。
+
+---
+
+### 追加する場所（ここが一番大事）
+
+`index.js` のこの形の部分を探してください：
+
+```js
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+
+  // ここに hello / save / read ... が並んでいるはず
+});
+```
+
+`hello` / `save` / `read` と同じ並びで、**同じ深さ（インデント）**に `/count` を1ブロック追加します。
+（つまり `client.on(...){ ... }` の中、他の `if (interaction.commandName === ...)` の“兄弟”として置く）
+
+---
+
+### `/count` の処理（このブロックを追加）
+
+```js
+// /count コマンド
 if (interaction.commandName === 'count') {
   const userId = interaction.user.id;
 
-  // 総記録数
-  const totalStmt = db.prepare('SELECT COUNT(*) as count FROM feelings WHERE user_id = ?');
+  // 1) 総記録数
+  const totalStmt = db.prepare(
+    'SELECT COUNT(*) as count FROM feelings WHERE user_id = ?'
+  );
   const { count: totalCount } = totalStmt.get(userId);
 
+  // 記録が0件ならここで終了
   if (totalCount === 0) {
     await interaction.reply('まだ記録がありません。/feeling で気分を記録してみましょう！');
     return;
   }
 
-  // 今日の記録数
+  // 2) 今日の記録数（PCのローカル時間 기준）
   const todayStmt = db.prepare(`
-    SELECT COUNT(*) as count 
-    FROM feelings 
-    WHERE user_id = ? 
-    AND DATE(created_at) = DATE('now', 'localtime')
+    SELECT COUNT(*) as count
+    FROM feelings
+    WHERE user_id = ?
+      AND DATE(created_at) = DATE('now', 'localtime')
   `);
   const { count: todayCount } = todayStmt.get(userId);
 
-  // 最新の記録
+  // 3) 最新の記録
   const latestStmt = db.prepare(`
-    SELECT feeling, note, created_at 
-    FROM feelings 
-    WHERE user_id = ? 
-    ORDER BY created_at DESC 
+    SELECT feeling, note, created_at
+    FROM feelings
+    WHERE user_id = ?
+    ORDER BY created_at DESC
     LIMIT 1
   `);
   const latest = latestStmt.get(userId);
 
-  // 時間差を計算
+  // 4) 「どれくらい前か」を文字にする（getTimeDiffが必要）
   const timeDiff = getTimeDiff(latest.created_at);
 
-  // 返信メッセージを組み立て
+  // 5) 返信メッセージを作る
   let message = '**あなたの記録**\n';
   message += `📊 総記録数: ${totalCount}回\n`;
   message += `📅 今日の記録: ${todayCount}回\n`;
-  message += `最終記録: ${latest.feeling} (${timeDiff})`;
+  message += `🕒 最終記録: ${latest.feeling} (${timeDiff})`;
 
   if (latest.note) {
-    message += `\nメモ: ${latest.note}`;
+    message += `\n📝 メモ: ${latest.note}`;
   }
 
   await interaction.reply(message);
+  return;
 }
 ```
+
+---
+
+### よくある詰まりポイント（最短で確認）
+
+* エラーで `feelings` がないと言われる → **テーブル名がまだ `messages` のまま**
+* エラーで `getTimeDiff is not defined` → **関数をまだ追加していない**
 
 ---
 
