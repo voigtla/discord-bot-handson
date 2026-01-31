@@ -254,7 +254,14 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     console.log('コマンドを登録中...');
     
     await rest.put(
-      Routes.applicationCommands(process.env.CLIENT_ID),
+      await rest.put(
+  Routes.applicationGuildCommands(
+    process.env.CLIENT_ID,
+    process.env.GUILD_ID
+  ),
+  { body: commands }
+);
+,
       { body: commands }
     );
     
