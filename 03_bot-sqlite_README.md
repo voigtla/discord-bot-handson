@@ -70,7 +70,28 @@ Bot: 記録されたメッセージ: おはよう
 
 ---
 
-### 1-3. Bot に権限を設定
+## 🔧 1-3. Bot の Gateway Intents を有効化（重要）
+
+> ⚠️ **この設定をしないと、コードが正しくても Bot は起動時にエラーになります**
+
+1. Discord Developer Portal で、作成した **アプリ** を開く
+2. 左メニューの **Bot** をクリック
+3. 画面を下にスクロールして
+   **Privileged Gateway Intents** を探す
+4. 以下を **ON** にする：
+
+   * ✅ **Message Content Intent**
+5. 右下の **Save Changes** をクリック
+
+📌 補足：
+
+* この設定は **招待URL（OAuth2）とは別物**
+* Bot が **Discordと接続する時点で許可されるかどうか**に関係する
+* `GatewayIntentBits.MessageContent` を使うコードでは **必須**
+
+---
+
+### 1-4. Bot に権限を設定
 
 1. 左メニューの **OAuth2 → URL Generator**
 2. **SCOPES** で `bot` と `applications.commands` にチェック
@@ -83,13 +104,22 @@ Bot: 記録されたメッセージ: おはよう
 
 ---
 
-### 1-4. Bot をサーバーに招待
+## 1-5. Bot をサーバーに招待（変更なし）
 
-1. コピーした URL をブラウザで開く
+1. 生成された URL をブラウザで開く
 2. サーバーを選択
 3. **認証** をクリック
 
 **✅ Bot がサーバーに参加すれば成功です**
+
+---
+
+## なぜこの項目が必要か（短く理解用）
+
+* **BOT PERMISSIONS**
+  → サーバー内で「何ができるか」（送信・履歴・コマンド）
+* **Privileged Gateway Intents**
+  → Discordから「どんな情報を受け取っていいか」
 
 ---
 
@@ -106,7 +136,7 @@ cd git_practice
 ### 2-2. 必要なパッケージをインストール
 
 ```bash
-npm install discord.js better-sqlite3
+npm install discord.js better-sqlite3 dotenv
 ```
 
 **インストールされるもの：**
@@ -195,12 +225,21 @@ Discord サーバーを見ると、Bot がオンライン状態になってい�
 
 ### 4-1. コマンド登録用スクリプトを作成
 
-VS Code で `register-commands.js` を新規作成：
+## 4-1. コマンド登録用スクリプトを作成（重要）
 
-```javascript
+> ⚠️ このファイルでは `commands` を **あとから「追加」する章があります**  
+> そのため、この時点では **ひな形として作成**します。
+
+1. VS Code で **`register-commands.js`** を新規作成します
+
+2. 次のコードを **そのまま貼り付けて保存**してください  
+   （※この `commands` は、次の章で **置き換えます**）
+
+```js
 require('dotenv').config();
 const { REST, Routes } = require('discord.js');
 
+// ※この配列は、次の章で内容を置き換えます
 const commands = [
   {
     name: 'hello',
@@ -224,11 +263,13 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     console.error(error);
   }
 })();
-```
+````
 
 ---
 
-### 4-2. CLIENT_ID を .env に追加
+### 4-2. CLIENT_ID と GUILD_ID を .env に追加
+
+#### 4-2-1. CLIENT_ID（Application ID）を取得して .env に追加
 
 1. [Discord Developer Portal](https://discord.com/developers/applications) に戻る
 2. 作成したアプリケーションをクリック
@@ -239,6 +280,48 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 DISCORD_TOKEN=あなたのトークン
 CLIENT_ID=あなたのアプリケーションID
 ```
+
+---
+
+#### 4-2-2. GUILD_ID（サーバーID）を取得して .env に追加（開発者モードが必要）
+
+> ⚠️ サーバーID（GUILD_ID）をコピーするには、Discordの **開発者モード** をONにする必要があります。
+
+##### A) Discordで開発者モードをONにする
+
+**Discordアプリ（PC）で：**
+
+1. Discordを開く
+2. 左下の ⚙️（ユーザー設定）をクリック
+3. 左メニューから **詳細設定（Advanced）** を開く
+4. **開発者モード（Developer Mode）** を **ON** にする
+
+##### B) サーバーID（GUILD_ID）をコピーする
+
+1. `GUILD_ID` を設定したい **サーバー（ギルド）** を開く
+2. サーバー名（左上）を **右クリック**
+3. 表示されたメニューの一番下付近にある **「ID をコピー（Copy ID）」** をクリック
+
+   * これが **GUILD_ID** です（数字だけの長いID）
+
+##### C) `.env` に GUILD_ID を追記する
+
+`.env` を次のようにします：
+
+```bash
+DISCORD_TOKEN=あなたのトークン
+CLIENT_ID=あなたのアプリケーションID
+GUILD_ID=あなたのサーバーID
+```
+
+---
+
+✅ **ポイント**
+
+* `CLIENT_ID` は Developer Portal の **APPLICATION ID**
+* `GUILD_ID` は Discordアプリでコピーする **サーバーID**
+* どちらも **数字だけ**（引用符や余計な空白なし）で入れるのが安全です
+
 
 ---
 
@@ -303,12 +386,39 @@ Discord サーバーで `/hello` と入力してください。
 ---
 
 ## 第5章：SQLite でデータを保存（20分）
+了解です。
+**改善案①（置き換えを明示する版）**として、
+そのまま教材に貼れる **該当部分だけの Markdown** を作ります。
 
-### 5-1. データベースを初期化するコードを追加
+---
 
-`index.js` の先頭に以下を追加：
+## 5-1. データベースを初期化するコードを追加（重要）
 
-```javascript
+> ⚠️ この章では **index.js の先頭部分を「追加」ではなく「置き換え」ます**  
+> `Client` を作成するコードが **2回書かれないように注意してください。
+
+### 手順
+
+1. `index.js` を開く
+
+2. すでに書かれている、次のようなコードを **探して削除** します
+
+```js
+require('dotenv').config();
+const { Client, GatewayIntentBits } = require('discord.js');
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
+});
+````
+
+3. 代わりに、**ファイルの先頭に** 次のコードを貼り付けます
+
+```js
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const Database = require('better-sqlite3');
@@ -328,6 +438,7 @@ db.exec(`
 
 console.log('データベース準備完了');
 
+// Discord クライアントを作成（※ここは1回だけ）
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -335,17 +446,33 @@ const client = new Client({
     GatewayIntentBits.MessageContent
   ]
 });
-
-// 以下、既存のコード...
 ```
+
+4. このコードの **下に**、これまで書いてきた既存の処理
+   （`ready` / `interactionCreate` / `client.login` など）を
+   **そのまま残してください**
 
 ---
 
-### 5-2. /save コマンドを追加
+### ✅ ポイント
 
-`register-commands.js` に `/save` コマンドを追加：
+* `require('discord.js')` や `new Client(...)` は **1ファイルに1回だけ**
+* 「貼り足す」のではなく **先頭部分を差し替える** 作業です
 
-```javascript
+---
+
+## 5-2. `/save` と `/read` コマンドを追加
+
+> ⚠️ この章では **`commands` の配列を「追記」ではなく「置き換え」ます**
+> `const commands = ...` が **2回書かれないように注意してください。
+
+1. `register-commands.js` を開く
+
+2. すでにある `const commands = [...]` を **すべて削除**します
+
+3. 代わりに、次のコードを **同じ位置に貼り付けます**
+
+```js
 const commands = [
   {
     name: 'hello',
@@ -369,6 +496,17 @@ const commands = [
   }
 ];
 ```
+
+4. ファイルを保存します
+
+---
+
+### ✅ ポイント
+
+* `const commands = [...]` は **1ファイルに1回だけ**
+* 新しいコマンドは **「配列を差し替える」** 形で追加します
+
+---
 
 **コマンドを再登録：**
 ```bash
