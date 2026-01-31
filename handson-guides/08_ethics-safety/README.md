@@ -74,10 +74,31 @@
 
 ## 1-2. `/count` の返信部分を探す
 
-このあたりを探します（形は多少違ってもOKです）。
+このあたりを探します。
 
 ```js
-await interaction.reply(formatted);
+if (interaction.commandName === "count") {
+  const userId = interaction.user.id;
+
+  db.get(
+    `SELECT COUNT(*) as cnt FROM logs WHERE user_id = ?`,
+    [userId],
+    async (err, row) => {
+      if (err) {
+        await interaction.reply({
+          content: "処理に失敗しました。",
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const rawText = `これまでの記録回数は ${row.cnt} 回です。`;
+      const formatted = await formatText(rawText);
+
+      await interaction.reply(formatted);
+    }
+  );
+}
 ````
 
 ---
@@ -87,9 +108,32 @@ await interaction.reply(formatted);
 **次のように書き換えてください。**
 
 ```js
-await interaction.reply(
-  formatted + "\n\n最近の調子が分かりますね。"
-);
+if (interaction.commandName === "count") {
+  const userId = interaction.user.id;
+
+  db.get(
+    `SELECT COUNT(*) as cnt FROM logs WHERE user_id = ?`,
+    [userId],
+    async (err, row) => {
+      if (err) {
+        await interaction.reply({
+          content: "処理に失敗しました。",
+          ephemeral: true,
+        });
+        return;
+      }
+
+      // 👇「危ない一言」は rawText 側に入れる（AI整形が入っていても消えにくい）
+      const rawText =
+        `これまでの記録回数は ${row.cnt} 回です。` +
+        `\n\n最近の調子が分かりますね。`;
+
+      const formatted = await formatText(rawText);
+
+      await interaction.reply(formatted);
+    }
+  );
+}
 ```
 
 👉 これが **今回わざと入れる「余計な一言」**です。
@@ -154,12 +198,31 @@ Botが **余計なことを言う存在**になります。
 
 ---
 
-## 5-1. さっき足した一文を削除する
+## 5-1. さっき変更したコードを元に戻す
 
 ```js
-await interaction.reply(
-  formatted
-);
+if (interaction.commandName === "count") {
+  const userId = interaction.user.id;
+
+  db.get(
+    `SELECT COUNT(*) as cnt FROM logs WHERE user_id = ?`,
+    [userId],
+    async (err, row) => {
+      if (err) {
+        await interaction.reply({
+          content: "処理に失敗しました。",
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const rawText = `これまでの記録回数は ${row.cnt} 回です。`;
+      const formatted = await formatText(rawText);
+
+      await interaction.reply(formatted);
+    }
+  );
+}
 ```
 
 **元に戻すだけ**でOKです。
