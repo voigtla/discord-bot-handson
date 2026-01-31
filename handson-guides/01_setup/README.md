@@ -154,8 +154,8 @@ mkdir git_practice
 ターミナルで次を打ちます。
 
 ```bash
-cd
-
+cd git_practice
+```
 ---
 
 ## 6️⃣ 複数フォルダを扱う場合（ワークスペース）
