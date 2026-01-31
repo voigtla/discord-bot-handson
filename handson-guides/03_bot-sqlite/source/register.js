@@ -13,19 +13,26 @@
 
 require("dotenv").config();
 
-const { REST, Routes, SlashCommandBuilder } = require("discord.js");
+const {
+    REST,
+    Routes,
+    SlashCommandBuilder,
+} = require("discord.js");
 
-// ここで読むだけ（値はコードに書かない）
+// ===== 1) 環境変数チェック =====
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-// 足りないなら、理由を出しすぎずに止める（スクショ事故防止）
 if (!DISCORD_TOKEN || !CLIENT_ID || !GUILD_ID) {
-    console.error("❌ 実行に必要な設定が不足しています。(.env を確認)");
+    console.error("❌ .env が不足しています。以下を設定してください：");
+    console.error("- DISCORD_TOKEN");
+    console.error("- CLIENT_ID");
+    console.error("- GUILD_ID");
     process.exit(1);
 }
 
+// ===== 2) 登録するコマンド定義 =====
 const commands = [
     new SlashCommandBuilder()
         .setName("hello")
@@ -33,17 +40,20 @@ const commands = [
         .toJSON(),
 ];
 
+// ===== 3) Discord に登録 =====
 const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
 
 (async () => {
     try {
-        console.log("🔄 コマンド登録中...");
-        await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), {
-            body: commands,
-        });
-        console.log("✅ Command registered");
-    } catch (err) {
-        console.error("❌ 登録に失敗しました（ターミナルのログを確認）");
-        process.exit(1);
+        console.log("🔄 スラッシュコマンド登録中...");
+
+        await rest.put(
+            Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+            { body: commands }
+        );
+
+        console.log("✅ スラッシュコマンド登録完了");
+    } catch (error) {
+        console.error("❌ コマンド登録に失敗しました:", error);
     }
 })();

@@ -1,4 +1,3 @@
-
 # 第3回：Discord Bot を起動する（超入門・画面つき手順）
 — 「/hello に返事する」だけを最短で成功させる —
 
@@ -100,9 +99,10 @@ Discord の画面で `/hello` を打ったら、Bot が返事をする。
 ### いま開いている画面：Developer Portal（General Information）
 1. 左メニューの **General Information** を開く（多くの場合、最初から開いています）
 2. **Application ID** を探す
-3. **Copy**（コピー）を押してメモ帳などに貼っておく
+3. **Copy**（コピー）を押して、メモ帳などに貼っておく
 
-📌 ここでコピーしたものを、あとで `CLIENT_ID` として使います。
+📌 ここでコピーした Application ID は、後で `.env` に貼ります。  
+📌 **コードに直接貼りません**（安全のため）。
 
 ---
 
@@ -186,7 +186,8 @@ Discord の画面で `/hello` を打ったら、Bot が返事をする。
 1. サーバー名（左上）を右クリック
 2. **IDをコピー** をクリック
 
-📌 これが `GUILD_ID` です。どこかに貼っておきます。
+📌 ここでコピーしたサーバーIDは、後で `.env` に貼ります。  
+📌 **コードに直接貼りません**（安全のため）。
 
 ---
 
@@ -223,34 +224,55 @@ npm install discord.js dotenv
 
 ---
 
-# 5️⃣ トークンを `.env` に入れる（安全に扱う）
+# 5️⃣ 秘密情報は「コードではなく .env」に入れる（安全に扱う）
+
+ここが今日の超重要ポイントです。
+
+> **IDやトークンは、コードに書かない**
+> **.env に入れて、コードはそれを読むだけにする**
+
+---
 
 ## 5-1. `.env` を作る
 
 ### いま操作している場所：VS Code のターミナル
 
 ```bash
-echo DISCORD_TOKEN= > .env
+type nul > .env
 ```
+
+（Windows用：空の `.env` ファイルを作ります）
 
 ---
 
-## 5-2. `.env` を編集する
+## 5-2. `.env` を編集して「貼る場所」を作る
 
 ### いま開いている画面：VS Code（エディタ）
 
 1. 左のエクスプローラーで `.env` をクリックして開く
-2. 次の形にします
+2. 下の3行を **そのまま**書く（右側は空でOK）
 
 ```env
-DISCORD_TOKEN=ここにBot Tokenを貼る
+DISCORD_TOKEN=
+CLIENT_ID=
+GUILD_ID=
 ```
-
-✅ `.env` は **絶対に共有しない**（中身は貼らない）
 
 ---
 
-## 5-3. `.gitignore` を確認する（超重要）
+## 5-3. `.env` に値を貼る（この手順で迷子にならない）
+
+### いまやることは「右側に貼る」だけです
+
+* `DISCORD_TOKEN=` の右側に、Developer Portalでコピーした **Bot Token** を貼る
+* `CLIENT_ID=` の右側に、Developer Portalでコピーした **Application ID** を貼る
+* `GUILD_ID=` の右側に、Discordでコピーした **サーバーID** を貼る
+
+⚠️ `.env` の中身は **共有しない**（チャットにも資料にも貼らない）
+
+---
+
+## 5-4. `.gitignore` を確認する（超重要）
 
 ### いま開いている画面：VS Code（エディタ）
 
@@ -280,19 +302,22 @@ node_modules
 
 ## 6-2. `index.js` に貼るコード（最小構成）
 
+※ 第3回は「動けば勝ち」なので、いちばん事故りにくい書き方（require）にします。
+
 ```js
-import { Client, GatewayIntentBits, Events } from "discord.js";
-import "dotenv/config";
+require("dotenv").config();
+
+const { Client, GatewayIntentBits } = require("discord.js");
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-client.once(Events.ClientReady, () => {
+client.once("ready", () => {
   console.log("Bot is ready");
 });
 
-client.on(Events.InteractionCreate, async (interaction) => {
+client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === "hello") {
@@ -307,30 +332,60 @@ client.login(process.env.DISCORD_TOKEN);
 
 # 7️⃣ `/hello` コマンドを登録する（register.js）
 
-Botは起動するだけでは `/hello` が出ません。
+Botは起動するだけでは `/hello` が出ません。  
 **Discordに「helloというコマンドがあります」と登録する**必要があります。
+
+ここで重要なルールがあります。
+
+- **ID や Token をコードに直接貼りません**
+- **値は `.env` に入れて、コードはそれを読むだけ**にします
+
+---
 
 ## 7-1. `register.js` を作る
 
 ### いま開いている画面：VS Code（エクスプローラー）
 
-* `git_practice` を右クリック → 新しいファイル
-* `register.js` を作る
+- `git_practice` を右クリック → 新しいファイル
+- `register.js` を作る
 
 ---
 
-## 7-2. `register.js` に貼るコード
+## 7-2. `register.js` に貼るコード（全文）
 
 ```js
-import { REST, Routes, SlashCommandBuilder } from "discord.js";
-import "dotenv/config";
+/**
+ * register.js
+ *
+ * Discord にスラッシュコマンドを登録するためのスクリプト
+ *
+ * 役割：
+ * - /hello コマンドを Discord サーバーに登録する
+ *
+ * 注意：
+ * - Botを起動するファイルではない
+ * - コマンド定義を変更したときだけ実行すればOK
+ */
 
-// ① ここに貼る（Developer Portalでコピーした Application ID）
-const CLIENT_ID = "ここにApplication IDを貼る";
+require("dotenv").config();
 
-// ② ここに貼る（Discordでコピーした サーバーID）
-const GUILD_ID = "ここにサーバーIDを貼る";
+const {
+  REST,
+  Routes,
+  SlashCommandBuilder,
+} = require("discord.js");
 
+// ===== 1) 環境変数チェック =====
+const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
+
+if (!DISCORD_TOKEN || !CLIENT_ID || !GUILD_ID) {
+  console.error("❌ 実行に必要な設定が不足しています。（.env を確認）");
+  process.exit(1);
+}
+
+// ===== 2) 登録するコマンド定義 =====
 const commands = [
   new SlashCommandBuilder()
     .setName("hello")
@@ -338,16 +393,24 @@ const commands = [
     .toJSON(),
 ];
 
-const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
+// ===== 3) Discord に登録 =====
+const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
 
 (async () => {
-  await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), {
-    body: commands,
-  });
+  try {
+    console.log("🔄 スラッシュコマンド登録中...");
 
-  console.log("Command registered");
+    await rest.put(
+      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+      { body: commands }
+    );
+
+    console.log("✅ スラッシュコマンド登録完了");
+  } catch (error) {
+    console.error("❌ コマンド登録に失敗しました（ターミナルのログを確認）");
+  }
 })();
-```
+````
 
 ---
 
@@ -361,7 +424,17 @@ node register.js
 
 ✅ 成功の目印：
 
-* `Command registered` と表示される
+* `✅ スラッシュコマンド登録完了` と表示される
+
+---
+
+## 7-4. よくあるつまずき（ここだけ見ればOK）
+
+* `/hello` が候補に出ない
+  → `node register.js` を実行し直す
+
+* `❌ 実行に必要な設定が不足しています` が出る
+  → `.env` の中身を「貼らずに」見直す（空欄がないか）
 
 ---
 
@@ -397,19 +470,19 @@ node index.js
 
 ## ① `/hello` が候補に出ない
 
-* `node register.js` をやっていない可能性
-* `CLIENT_ID` / `GUILD_ID` が違う可能性
+* `node register.js` を実行していない可能性
+* `.env` の `CLIENT_ID` / `GUILD_ID` が別のものになっている可能性
 
-👉 まずは `node register.js` をもう一回
+👉 まず `node register.js` をもう一回
 
 ---
 
 ## ② `Bot is ready` が出ない
 
-* `.env` の `DISCORD_TOKEN` が間違っている
-* `.env` を保存していない
+* `.env` の `DISCORD_TOKEN` が間違っている可能性
+* `.env` を保存していない可能性
 
-👉 `.env` を開いて、トークンが入っているかだけ確認（貼らない）
+👉 `.env` を開いて「右側に何か入っているか」だけ確認（貼らない）
 
 ---
 
@@ -442,7 +515,7 @@ git push
 
 * [ ] Developer Portal で Bot を作った
 * [ ] Bot をサーバーに招待できた
-* [ ] `.env` に Token を入れた（共有してない）
+* [ ] `.env` に値を貼った（共有してない）
 * [ ] `node register.js` が成功した
 * [ ] `node index.js` で `Bot is ready` が出た
 * [ ] Discordで `/hello` が反応した
