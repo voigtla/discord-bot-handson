@@ -100,6 +100,7 @@ Bot: 🤖 1週間続いているんですね。仕事のことが頭から離れ
 ```bash
 DISCORD_TOKEN=あなたのトークン
 CLIENT_ID=あなたのアプリケーションID
+GUILD_ID=あなたのサーバーID
 GEMINI_API_KEY=あなたのGemini APIキー
 ```
 
@@ -127,7 +128,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 async function testGemini() {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     
     const prompt = 'こんにちは！あなたは誰ですか？';
     const result = await model.generateContent(prompt);
@@ -164,7 +165,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 class AIHelper {
   constructor(apiKey) {
     this.genAI = new GoogleGenerativeAI(apiKey);
-    this.model = this.genAI.getGenerativeModel({ model: 'gemini-pro' });
+    this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     
     // システムプロンプト（Bot の役割定義）
     this.systemPrompt = `あなたはメンタルヘルスサポートのための優しいチャットボットです。
