@@ -154,7 +154,14 @@ mkdir git_practice
 ターミナルで次を打ちます。
 
 ```bash
-cd
+pwd
+````
+表示例：
+```bash
+Path
+----
+C:\Users\admin\
+````
 
 ---
 
