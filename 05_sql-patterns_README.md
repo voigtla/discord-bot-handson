@@ -344,9 +344,13 @@ client.on('interactionCreate', async interaction => {
 
 ### 2-3. オートコンプリートの実装
 
-テンプレートのキーを入力候補として表示します：
+ここは `/template` を実行したときの処理ではなく、**入力中に候補を返すため**の処理です。  
+そのため、`interaction.isChatInputCommand()` の中（/template の処理ブロックの中）には書きません。
 
-```javascript
+`index.js` を開き、すでにある `client.on('interactionCreate', async interaction => { ... })` を探してください。  
+その **近く（同じ階層）**に、次の「オートコンプリート用の interactionCreate」を **別ブロックとして新しく追加**します。
+
+```js
 // オートコンプリートのハンドラ
 client.on('interactionCreate', async interaction => {
   if (!interaction.isAutocomplete()) return;
@@ -361,7 +365,7 @@ client.on('interactionCreate', async interaction => {
     );
   }
 });
-```
+
 
 ---
 
@@ -443,9 +447,13 @@ initializeKeywords();
 
 ### 3-2. メッセージ監視の実装
 
-通常のメッセージに反応する処理を追加：
+ここでは、スラッシュコマンドではなく **通常のメッセージ**（ユーザーがそのまま送信した文）に反応します。  
+そのため、`client.on('interactionCreate', ...)` の中には書きません（別イベントです）。
 
-```javascript
+`index.js` を開き、まず `client.on('interactionCreate', ...)` のブロックを見つけてください。  
+その **ブロックの外側（同じ階層）**に、次の `client.on('messageCreate', ...)` を **新しく追加**します。
+
+```js
 // メッセージイベントのハンドラ
 client.on('messageCreate', async message => {
   // Bot自身のメッセージは無視
@@ -586,9 +594,13 @@ node register-commands.js
 
 ### 4-2. /keyword コマンドの処理
 
-`index.js` に追加：
+ここは **スラッシュコマンド実行時の処理**なので、`index.js` の  
+`client.on('interactionCreate', async interaction => { ... })` の中に入れます。
 
-```javascript
+具体的には、`if (!interaction.isChatInputCommand()) return;` の **下**で、  
+他の `if (interaction.commandName === '...') { ... }` と **同じ並び（同じ深さ）**として追加します。
+
+```js
 if (interaction.commandName === 'keyword') {
   // 管理者権限チェック
   if (!interaction.member.permissions.has('ManageMessages')) {
