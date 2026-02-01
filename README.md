@@ -16,7 +16,7 @@
 | 2 | Git/GitHub基礎 | add / commit / push の流れを作って、GitHubへ公開する | [📄 第2回資料](02_git-practice_README_expand.md) |
 | 3 | Bot初導入 + SQLite基礎 | Discord Bot を起動し、SQLiteに保存・読み出しする | [📄 第3回資料](03_bot-sqlite_README_expand.md) |
 | 4 | SQLite保存 + データ集計 | 気分記録（/feeling）と、集計（/count）まで到達する | [📄 第4回資料](04_mental-bot-basic_README_expand.md) |
-| 5 | 定型パターンの登録 | テンプレート管理とキーワード反応（SQLパターンの応用） | [📄 第5回資料](05_sql-patterns_README_expand.md) |
+| 5 | 定型パターンの登録 | テンプレート管理とキーワード反応（SQLパターンの応用） | [📄 第5回資料](05_sql-patterns_README_expand2.md) |
 | 6 | AI機能の導入（第一回） | Gemini API登録、AI会話の導入 | [📄 第6回資料](06_gemini-api_README_expand.md) |
 | 7 | AI機能の導入（第二回） | 荒らし対策・スパム検出・運用セキュリティ | [📄 第7回資料](07_bot-security_README_expand.md) |
 | 8 | エラーハンドリング | 壊れにくい作り（try/catch、DBの安全策、フォールバック） | [📄 第8回資料](08_error-handling_README_expand.md) |
