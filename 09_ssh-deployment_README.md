@@ -325,6 +325,12 @@ pm2 start index.js --name discord-bot
 
 ### 5-2. PM2 の基本コマンド
 
+**⚠️ サーバー上で実行します。**
+
+PM2 で Bot を管理するための基本的なコマンドを覚えましょう。
+
+**これらのコマンドはすべてサーバーのターミナルで実行します。**
+
 ここで追加する処理は、**スラッシュコマンドを実行した瞬間**に動くものです。  
 `index.js` を開き、`client.on('interactionCreate', ...)` を探してください。  
 その中の `if (!interaction.isChatInputCommand()) return;` があるブロックが対象です。  

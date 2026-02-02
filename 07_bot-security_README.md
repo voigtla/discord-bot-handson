@@ -236,6 +236,44 @@ module.exports = SpamDetector;
 
 ### 1-3. index.js に統合
 
+**ここで編集するファイル：** `index.js`
+
+**何をするか：**  
+2つのステップがあります。
+
+**ステップ1：** ファイルの先頭で `spam-detector.js` を読み込む  
+**ステップ2：** `/ai` コマンドの処理の中にスパムチェックを追加する
+
+---
+
+#### ステップ1：ファイルの先頭に追加
+
+**どこに書くか：**  
+`index.js` の **一番上のほう**（`require` が並んでいるあたり）に追加します。
+
+具体的には、`const AIHelper = require('./ai-helper');` の **下**に追加：
+
+```javascript
+const SpamDetector = require('./spam-detector');
+```
+
+そして、`const aiHelper = new AIHelper(...);` の **下**に追加：
+
+```javascript
+const spamDetector = new SpamDetector(db);
+```
+
+---
+
+#### ステップ2：/ai コマンドにスパムチェックを追加
+
+**どこに書くか：**  
+すでにある `/ai` コマンドの処理の **中**に、チェック処理を追加します。
+
+具体的には、`if (interaction.commandName === 'ai') {` の **すぐ下**に追加してください。
+
+**以下は修正後のイメージです：**
+
 ```javascript
 const SpamDetector = require('./spam-detector');
 
@@ -370,6 +408,42 @@ module.exports = ContentFilter;
 ---
 
 ### 2-2. index.js に統合
+
+**ここで編集するファイル：** `index.js`
+
+**何をするか：**  
+2つのステップがあります。
+
+**ステップ1：** ファイルの先頭で `content-filter.js` を読み込む  
+**ステップ2：** `/ai` コマンドの処理の中にフィルタリングを追加する
+
+---
+
+#### ステップ1：ファイルの先頭に追加
+
+**どこに書くか：**  
+`index.js` の **一番上のほう**（`require` が並んでいるあたり）に追加します。
+
+具体的には、`const SpamDetector = require('./spam-detector');` の **下**に追加：
+
+```javascript
+const ContentFilter = require('./content-filter');
+```
+
+そして、`const spamDetector = new SpamDetector(db);` の **下**に追加：
+
+```javascript
+const contentFilter = new ContentFilter();
+```
+
+---
+
+#### ステップ2：/ai コマンドにフィルタリングを追加
+
+**どこに書くか：**  
+すでにある `/ai` コマンドの処理の **中**、スパムチェックの **下**に追加します。
+
+**以下は修正後のイメージです（既存のスパムチェック + 新しいフィルタリング）：**
 
 ```javascript
 const ContentFilter = require('./content-filter');

@@ -300,6 +300,57 @@ node register-commands.js
 
 ### 3-4. index.js に AI 機能を統合
 
+**ここで編集するファイル：** `index.js`
+
+**何をするか：**  
+2つのステップがあります。
+
+**ステップ1：** ファイルの先頭部分に、AI を使うための「読み込み」を追加する  
+**ステップ2：** `/ai` と `/ai-reset` コマンドの処理を追加する
+
+---
+
+#### ステップ1：ファイルの先頭に追加
+
+**どこに書くか：**  
+`index.js` の **一番上のほう**（`require` が並んでいるあたり）に追加します。
+
+具体的には、次のような行があるはずです：
+
+```javascript
+require('dotenv').config();
+const { Client, GatewayIntentBits } = require('discord.js');
+const Database = require('better-sqlite3');
+```
+
+この **下**に、次の行を追加してください：
+
+```javascript
+const AIHelper = require('./ai-helper');
+```
+
+そして、`const db = new Database('bot.db');` の **すぐ下**に、次の行を追加：
+
+```javascript
+const aiHelper = new AIHelper(process.env.GEMINI_API_KEY);
+```
+
+---
+
+#### ステップ2：コマンド処理を追加
+
+**どこに書くか：**  
+スラッシュコマンドを実行した瞬間に動く処理です。  
+`client.on('interactionCreate', async interaction => { ... })` の中で、  
+`if (!interaction.isChatInputCommand()) return;` の **下**に、  
+他の `if (interaction.commandName === '...')` と **同じ並び（同じ深さ）** として追加します。
+
+**具体的には：**  
+すでにある `/template` や `/sos` のコマンド処理の **下**に、  
+次のコードを追加してください。
+
+**以下は全体像の参考です（実際には差分だけ追加してください）：**
+
 ```javascript
 require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
@@ -438,6 +489,29 @@ db.exec(`
 
 ### 4-2. レート制限の実装
 
+**ここで編集するファイル：** `index.js`
+
+**どこに書くか：**  
+関数を定義する場所です。  
+`index.js` の中で、`client.on(...)` などのイベントハンドラよりも **上**に書きます。
+
+**具体的には：**  
+ファイルの構成は通常こうなっています：
+
+```
+1. require文（ライブラリの読み込み）
+2. データベース接続・初期化
+3. 関数の定義 ← ここに書く
+4. Botクライアントの作成
+5. イベントハンドラ（ready, interactionCreate など）
+6. client.login()
+```
+
+「3. 関数の定義」のエリアに、次の関数を追加してください。
+
+**この関数の役割：**  
+ユーザーが制限回数を超えていないかチェックします。
+
 ```javascript
 // レート制限をチェックする関数
 function checkRateLimit(userId, maxRequests = 20, windowMinutes = 60) {
@@ -548,6 +622,22 @@ if (interaction.commandName === 'ai') {
 ---
 
 ### 5-2. 統計表示の実装
+
+**ここで編集するファイル：** `index.js`
+
+**どこに書くか：**  
+スラッシュコマンドを実行した瞬間に動く処理です。  
+`client.on('interactionCreate', async interaction => { ... })` の中で、  
+`if (!interaction.isChatInputCommand()) return;` の **下**に、  
+他の `if (interaction.commandName === '...')` と **同じ並び（同じ深さ）** として追加します。
+
+**具体的には：**  
+すでにある `/ai-reset` コマンドの処理の **下**に、  
+次のコードを追加してください。
+
+**このコマンドの役割：**  
+管理者が AI の使用状況を確認できます。  
+総会話数、今日の会話数、利用者数を表示します。
 
 ```javascript
 if (interaction.commandName === 'ai-stats') {

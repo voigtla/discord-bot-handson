@@ -57,7 +57,20 @@ Bot: 📞 緊急連絡先
 
 ### 1-1. データベース設計
 
-定型メッセージを管理するテーブルを追加します。
+**ここで編集するファイル：** `index.js`
+
+**どこに書くか：**  
+データベース（SQLite）の準備をする場所です。  
+`index.js` の上のほうにある `const db = new Database(...)` と `db.exec(\` が並んでいるあたりを探してください。  
+テーブル作成や初期化のコードは、基本的にこの **DB準備のかたまりの中**に置きます。
+
+**具体的には：**  
+すでにある `db.exec(\`CREATE TABLE IF NOT EXISTS feelings ...\`)` などのテーブル作成ブロックの **下**に、  
+新しく次のテーブル作成コードを追加します。
+
+**このテーブルの役割：**  
+定型メッセージ（テンプレート）を保存します。  
+管理者が自由にメッセージを追加・編集できるようにするためのテーブルです。
 
 `index.js` のデータベース初期化部分に追加：
 
@@ -85,6 +98,21 @@ db.exec(`
 ---
 
 ### 1-2. 初期データを投入
+
+**ここで編集するファイル：** `index.js`
+
+**どこに書くか：**  
+データベースの初期化が終わった後、Bot を起動する前の場所です。
+
+具体的には：
+1. `db.exec(...)` でテーブルを作成するコードの **下**
+2. `const client = new Client(...)` で Bot を作成するコードの **上**
+
+この位置に、次の関数を追加してください。
+
+**この関数の役割：**  
+Bot を起動するたびに、基本的なテンプレート（深呼吸ガイドや緊急連絡先など）を自動で登録します。  
+`INSERT OR IGNORE` を使っているので、すでに登録されている場合は何もしません（重複しません）。
 
 Bot 起動時に基本的なテンプレートを自動追加します：
 
@@ -135,6 +163,24 @@ initializeTemplates();
 ## 第2章：/template コマンドの実装（20分）
 
 ### 2-1. コマンドを登録
+
+**ここで編集するファイル：** `register-commands.js`
+
+**どこに書くか：**  
+「Discordにコマンドを登録する」ためのファイルです。  
+`register-commands.js` を開き、`const commands = [` を探してください。  
+この章で追加するのは、基本的にこの **配列の中身**です（既存の配列を編集します）。
+
+**具体的には：**  
+すでにある `{ name: 'count', description: ... }` などのコマンド定義の **下**に、  
+カンマ（`,`）で区切って、次のコマンドを追加します。
+
+**このコマンドの役割：**  
+`/template` コマンドは、サブコマンド形式です。  
+- `/template get [キー]` → テンプレートを取得
+- `/template list` → 一覧表示
+- `/template add` → 追加（管理者のみ）
+- `/template delete` → 削除（管理者のみ）
 
 `register-commands.js` に追加：
 
@@ -216,6 +262,18 @@ node register-commands.js
 ---
 
 ### 2-2. /template コマンドの処理を実装
+
+**ここで編集するファイル：** `index.js`
+
+**どこに書くか：**  
+スラッシュコマンドを実行した瞬間に動く処理です。  
+`client.on('interactionCreate', async interaction => { ... })` の中で、  
+`if (!interaction.isChatInputCommand()) return;` の **下**に、  
+他の `if (interaction.commandName === '...')` と **同じ並び（同じ深さ）** として追加します。
+
+**具体的には：**  
+すでにある `/count` や `/feeling` のコマンド処理の **下**に、  
+次のコードを追加してください。
 
 `index.js` に追加：
 
@@ -344,8 +402,30 @@ client.on('interactionCreate', async interaction => {
 
 ### 2-3. オートコンプリートの実装
 
-ここは `/template` を実行したときの処理ではなく、**入力中に候補を返すため**の処理です。  
+**ここで編集するファイル：** `index.js`
+
+**どこに書くか：**  
+⚠️ **注意：** ここは `/template` を実行したときの処理ではなく、**入力中に候補を返すため**の処理です。  
 そのため、`interaction.isChatInputCommand()` の中（/template の処理ブロックの中）には書きません。
+
+**具体的には：**  
+`index.js` を開き、すでにある `client.on('interactionCreate', async interaction => { ... })` を探してください。  
+その **ブロックの外側（同じ階層）**に、次の「オートコンプリート用の interactionCreate」を **新しいブロックとして追加**します。
+
+**イメージ：**
+```javascript
+// 既存のコマンド処理
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+  // ... コマンド処理 ...
+});
+
+// ここに新しく追加 ↓
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isAutocomplete()) return;
+  // ... オートコンプリート処理 ...
+});
+```
 
 `index.js` を開き、すでにある `client.on('interactionCreate', async interaction => { ... })` を探してください。  
 その **近く（同じ階層）**に、次の「オートコンプリート用の interactionCreate」を **別ブロックとして新しく追加**します。
@@ -446,6 +526,40 @@ initializeKeywords();
 ---
 
 ### 3-2. メッセージ監視の実装
+
+**ここで編集するファイル：** `index.js`
+
+**どこに書くか：**  
+⚠️ **注意：** ここでは、スラッシュコマンドではなく **通常のメッセージ**（ユーザーがそのまま送信した文）に反応します。  
+そのため、`client.on('interactionCreate', ...)` の中には書きません（別イベントです）。
+
+**具体的には：**  
+`index.js` を開き、まず `client.on('interactionCreate', ...)` のブロックを見つけてください。  
+その **ブロックの外側（同じ階層）**に、次の `client.on('messageCreate', ...)` を **新しく追加**します。
+
+**イメージ：**
+```javascript
+// コマンド処理（既存）
+client.on('interactionCreate', async interaction => {
+  // ... コマンド処理 ...
+});
+
+// オートコンプリート（既存）
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isAutocomplete()) return;
+  // ... オートコンプリート処理 ...
+});
+
+// ここに新しく追加 ↓
+client.on('messageCreate', async message => {
+  // ... メッセージ監視処理 ...
+});
+```
+
+**この処理の役割：**  
+ユーザーが普通にメッセージを送ったとき（スラッシュコマンドではなく）、  
+そのメッセージに「辛い」「苦しい」などのキーワードが含まれていたら、  
+自動で励ましのメッセージを返します。
 
 ここでは、スラッシュコマンドではなく **通常のメッセージ**（ユーザーがそのまま送信した文）に反応します。  
 そのため、`client.on('interactionCreate', ...)` の中には書きません（別イベントです）。
