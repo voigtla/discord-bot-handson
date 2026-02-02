@@ -283,6 +283,33 @@
 
 **ローカルPC（Windows）で実行：**
 
+#### まず、.sshフォルダが存在するか確認
+
+```powershell
+Test-Path $env:USERPROFILE\.ssh
+```
+
+**`False` と表示された場合：** フォルダが存在しないので、作成します
+
+```powershell
+New-Item -ItemType Directory -Path $env:USERPROFILE\.ssh
+```
+
+**✅ フォルダが作成されると：**
+```
+    ディレクトリ: C:\Users\<あなたのユーザー名>
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----        2026/02/03     12:34                .ssh
+```
+
+**`True` と表示された場合：** すでにフォルダが存在するので、そのまま次に進んでOK
+
+---
+
+#### SSHキーペアを作成
+
 ```powershell
 ssh-keygen -t rsa -b 2048 -f $env:USERPROFILE\.ssh\gcp-discord-bot
 ```
@@ -307,6 +334,13 @@ Enter same passphrase again:
 ```
 Your identification has been saved in C:\Users\<あなたのユーザー名>\.ssh\gcp-discord-bot
 Your public key has been saved in C:\Users\<あなたのユーザー名>\.ssh\gcp-discord-bot.pub
+The key fingerprint is:
+SHA256:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+The key's randomart image is:
++---[RSA 2048]----+
+|                 |
+...
++----[SHA256]-----+
 ```
 
 **作成されたファイル：**
