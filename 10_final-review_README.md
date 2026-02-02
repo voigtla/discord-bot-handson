@@ -309,7 +309,6 @@ MIT License
 ## 連絡先
 
 問題があれば Issue を作成してください。
-```
 
 ---
 
@@ -342,9 +341,9 @@ MIT License
 - `note` (任意): メモ
 
 **例：**
-```
+
 /feeling mood:good note:天気が良い
-```
+
 
 ### /count
 
