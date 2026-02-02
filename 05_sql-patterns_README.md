@@ -1318,7 +1318,6 @@ client.on('messageCreate', async message => {
 
 client.login(process.env.DISCORD_TOKEN);
 ```
-
 ---
 
 ### register-commands.js
@@ -1371,7 +1370,6 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
   }
 })();
 ```
-
 ---
 
 ### .env.example

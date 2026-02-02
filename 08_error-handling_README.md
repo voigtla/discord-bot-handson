@@ -1056,3 +1056,168 @@ process.on('uncaughtException', (error) => {
 
 これで第8回は完成です！
 
+
+---
+
+### index.js（完全版）
+
+**第7回のindex.jsをベースに、以下の変更を適用してください：**
+
+#### 1. データベーステーブルに追加（db.exec部分）
+
+```javascript
+// エラーログテーブル
+db.exec(`
+  CREATE TABLE IF NOT EXISTS error_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    command TEXT,
+    error_message TEXT,
+    stack_trace TEXT,
+    user_id TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+```
+
+#### 2. 関数定義エリアに追加
+
+```javascript
+// エラーログ記録関数
+function logError(command, error, userId = null) {
+  try {
+    const stmt = db.prepare('INSERT INTO error_logs (command, error_message, stack_trace, user_id) VALUES (?, ?, ?, ?)');
+    stmt.run(command, error.message, error.stack, userId);
+  } catch (logErr) {
+    console.error('エラーログの記録に失敗:', logErr);
+  }
+}
+
+// AI応答のフォールバック
+async function getAIResponse(userMessage, history) {
+  try {
+    const response = await aiHelper.chat(userMessage, history);
+    if (response.success) {
+      return response.message;
+    } else {
+      return getFallbackResponse();
+    }
+  } catch (error) {
+    logError('ai_chat', error);
+    return getFallbackResponse();
+  }
+}
+
+function getFallbackResponse() {
+  const fallbacks = [
+    '今は少し考えがまとまりません... 深呼吸してみませんか？ `/template get breathe`',
+    '申し訳ありません、うまくお答えできませんでした。もう一度教えていただけますか？',
+    'ちょっと言葉が見つかりません... `/sos` で緊急連絡先を確認できます。'
+  ];
+  return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+}
+```
+
+#### 3. 重要なコマンドにtry-catchを追加
+
+**例：/feeling コマンド**
+```javascript
+if (interaction.commandName === 'feeling') {
+  try {
+    const userId = interaction.user.id;
+    const feeling = interaction.options.getString('mood');
+    const note = interaction.options.getString('note') || null;
+    
+    const stmt = db.prepare('INSERT INTO feelings (user_id, feeling, note) VALUES (?, ?, ?)');
+    stmt.run(userId, feeling, note);
+    
+    const countStmt = db.prepare('SELECT COUNT(*) as count FROM feelings WHERE user_id = ?');
+    const { count } = countStmt.get(userId);
+    
+    const emoji = { great: '😊', good: '🙂', okay: '😐', down: '😔', bad: '😢' }[feeling] || '📝';
+    let message = `今日の気分を記録しました ${emoji} (累計: ${count}回目)`;
+    if (note) message += `\nメモ: ${note}`;
+    
+    await interaction.reply(message);
+  } catch (error) {
+    logError('feeling', error, interaction.user.id);
+    await interaction.reply({ content: '❌ 記録に失敗しました。もう一度お試しください。', ephemeral: true });
+  }
+}
+```
+
+同様に、/count、/template、/ai などの主要なコマンドすべてにtry-catchを追加してください。
+
+#### 4. AIコマンドでgetAIResponse関数を使用
+
+```javascript
+if (interaction.commandName === 'ai') {
+  try {
+    const userId = interaction.user.id;
+    const userMessage = interaction.options.getString('message');
+
+    // スパムチェック、レート制限、フィルタリング（既存のまま）
+    // ...
+
+    await interaction.deferReply();
+
+    const historyStmt = db.prepare(`SELECT role, content FROM ai_conversations WHERE user_id = ? ORDER BY created_at DESC LIMIT 10`);
+    const history = historyStmt.all(userId).reverse();
+    
+    // AI応答を取得（フォールバック対応）
+    const aiMessage = await getAIResponse(userMessage, history);
+
+    const saveStmt = db.prepare('INSERT INTO ai_conversations (user_id, role, content) VALUES (?, ?, ?)');
+    saveStmt.run(userId, 'user', userMessage);
+    saveStmt.run(userId, 'assistant', aiMessage);
+
+    await interaction.editReply(aiMessage + `\n\n_（残り ${rateLimit.remaining} 回）_`);
+  } catch (error) {
+    logError('ai', error, interaction.user.id);
+    await interaction.editReply('❌ AI応答の取得に失敗しました。しばらくしてからお試しください。');
+  }
+}
+```
+
+#### 5. グレースフルシャットダウン（client.login()の直前に追加）
+
+```javascript
+// グレースフルシャットダウン
+async function gracefulShutdown(signal) {
+  console.log(`\n${signal} を受信しました。終了処理を開始します...`);
+
+  try {
+    if (client.user) {
+      console.log('Botをオフライン状態にしています...');
+      await client.destroy();
+    }
+
+    console.log('データベースを閉じています...');
+    db.close();
+
+    console.log('✅ 正常に終了しました');
+    process.exit(0);
+  } catch (error) {
+    console.error('終了処理中にエラーが発生:', error);
+    process.exit(1);
+  }
+}
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+process.on('unhandledRejection', (error) => {
+  console.error('未処理のPromise拒否:', error);
+  logError('unhandledRejection', error);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('未処理の例外:', error);
+  logError('uncaughtException', error);
+  gracefulShutdown('uncaughtException');
+});
+```
+
+**注意：** 第8回では新規ファイルはありません。第7回のindex.jsに上記の変更を適用することで完成します。
+
+これで第8回は完成です！
+

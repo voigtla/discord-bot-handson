@@ -309,6 +309,7 @@ MIT License
 ## 連絡先
 
 問題があれば Issue を作成してください。
+```
 
 ---
 
@@ -341,9 +342,9 @@ MIT License
 - `note` (任意): メモ
 
 **例：**
-
+```
 /feeling mood:good note:天気が良い
-
+```
 
 ### /count
 
@@ -424,7 +425,7 @@ Discord で：
 4. 必要なら `pm2 restart discord-bot`
 
 ...
-
+```
 
 ---
 
@@ -1080,4 +1081,39 @@ module.exports = {
 - UIの改善（ボタン、セレクトメニュー）
 - 他のサーバーでの運用
 - コミュニティへの貢献
+
+
+---
+
+### index.js（完全版）
+
+**第8回のindex.jsと同じです。**
+
+第10回では、コードの変更はありません。  
+全機能を通して確認し、ドキュメントを整備します。
+
+**最終的なファイル構成：**
+- index.js（第8回で完成）
+- ai-helper.js（第6回で作成）
+- spam-detector.js（第7回で作成）
+- content-filter.js（第7回で作成）
+- register-commands.js（全10回のコマンドを含む）
+- deploy.sh（第9回で作成）
+- ecosystem.config.js（第9回/第10回で作成）
+- README.md（第10回で作成）
+- COMMANDS.md（第10回で作成）
+- OPERATIONS.md（第10回で作成）
+
+**全10回の完成おめでとうございます！** 🎉
+
+あなたは以下を習得しました：
+- Node.js / Discord.js の基礎
+- SQLite によるデータ管理
+- Git / GitHub での開発フロー
+- AI API（Gemini）の統合
+- セキュリティ対策
+- エラーハンドリング
+- 本番環境へのデプロイ
+
+これで第10回は完成です！
 
