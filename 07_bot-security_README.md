@@ -907,3 +907,323 @@ await spamDetector.removePenalty(userId);
 - わざと危ない実装を体験
 
 **👉 Bot が壊れない仕組みを作ります！**
+---
+
+## 📦 第7回の完成版ソースコード
+
+### ファイル構成
+```
+git_practice/
+├── .gitignore
+├── .env
+├── .env.example
+├── package.json
+├── index.js
+├── register-commands.js
+├── ai-helper.js
+├── spam-detector.js（★新規）
+└── content-filter.js（★新規）
+```
+
+---
+
+### 新規ファイル：spam-detector.js
+```javascript
+class SpamDetector {
+  constructor(db) {
+    this.db = db;
+    
+    // スパム検出用テーブル
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS spam_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        message_content TEXT,
+        reason TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    // ペナルティテーブル
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS penalties (
+        user_id TEXT PRIMARY KEY,
+        count INTEGER DEFAULT 0,
+        banned_until DATETIME
+      )
+    `);
+  }
+
+  async checkSpam(userId, message) {
+    // 連投チェック
+    const stmt = this.db.prepare(`
+      SELECT COUNT(*) as count 
+      FROM spam_logs 
+      WHERE user_id = ? AND created_at > datetime('now', '-30 seconds')
+    `);
+    const { count } = stmt.get(userId);
+    
+    if (count >= 3) {
+      this.addPenalty(userId, 'rapid_posting');
+      return { isSpam: true, reason: '連投が検出されました' };
+    }
+    
+    // 重複メッセージチェック
+    const dupStmt = this.db.prepare(`
+      SELECT message_content 
+      FROM spam_logs 
+      WHERE user_id = ? 
+      ORDER BY created_at DESC 
+      LIMIT 3
+    `);
+    const recent = dupStmt.all(userId);
+    
+    if (recent.length >= 3 && recent.every(r => r.message_content === message)) {
+      this.addPenalty(userId, 'duplicate_messages');
+      return { isSpam: true, reason: '同じメッセージの繰り返しが検出されました' };
+    }
+    
+    // ログに記録
+    const logStmt = this.db.prepare('INSERT INTO spam_logs (user_id, message_content) VALUES (?, ?)');
+    logStmt.run(userId, message);
+    
+    return { isSpam: false };
+  }
+
+  addPenalty(userId, reason) {
+    const stmt = this.db.prepare(`
+      INSERT INTO penalties (user_id, count, banned_until) 
+      VALUES (?, 1, datetime('now', '+5 minutes'))
+      ON CONFLICT(user_id) DO UPDATE SET 
+        count = count + 1,
+        banned_until = datetime('now', '+' || (count * 5) || ' minutes')
+    `);
+    stmt.run(userId);
+  }
+
+  checkPenalty(userId) {
+    const stmt = this.db.prepare('SELECT banned_until FROM penalties WHERE user_id = ?');
+    const row = stmt.get(userId);
+    
+    if (!row) return { banned: false };
+    
+    const bannedUntil = new Date(row.banned_until);
+    const now = new Date();
+    
+    if (now < bannedUntil) {
+      const minutesLeft = Math.ceil((bannedUntil - now) / 60000);
+      return { banned: true, minutesLeft };
+    }
+    
+    return { banned: false };
+  }
+
+  removePenalty(userId) {
+    const stmt = this.db.prepare('DELETE FROM penalties WHERE user_id = ?');
+    stmt.run(userId);
+  }
+}
+
+module.exports = SpamDetector;
+```
+
+---
+
+### 新規ファイル：content-filter.js
+```javascript
+class ContentFilter {
+  constructor() {
+    this.bannedWords = [
+      // 不適切な表現
+      '死ね', 'クソ', 'バカ', 'アホ', 'カス',
+      // 差別的表現
+      // ...（実際には適切なリストを用意）
+    ];
+    
+    this.sensitivePatterns = [
+      /https?:\/\/[^\s]+/gi,  // URL
+      /\d{10,}/,              // 長い数字（電話番号など）
+      /@everyone/,            // メンション
+      /@here/
+    ];
+  }
+
+  check(message) {
+    const lowerMessage = message.toLowerCase();
+    
+    // 禁止ワードチェック
+    for (const word of this.bannedWords) {
+      if (lowerMessage.includes(word)) {
+        return {
+          safe: false,
+          reason: 'inappropriate_language',
+          message: '不適切な表現が含まれています'
+        };
+      }
+    }
+    
+    // パターンチェック
+    for (const pattern of this.sensitivePatterns) {
+      if (pattern.test(message)) {
+        return {
+          safe: false,
+          reason: 'suspicious_pattern',
+          message: '不適切なパターンが検出されました'
+        };
+      }
+    }
+    
+    return { safe: true };
+  }
+
+  sanitize(message) {
+    let sanitized = message;
+    
+    // URLを削除
+    sanitized = sanitized.replace(/https?:\/\/[^\s]+/gi, '[URL削除]');
+    
+    // メンションを削除
+    sanitized = sanitized.replace(/@(everyone|here)/gi, '[@$1]');
+    
+    return sanitized;
+  }
+}
+
+module.exports = ContentFilter;
+```
+
+---
+
+### index.js の変更点
+
+**第6回のindex.jsをベースに以下を追加：**
+
+**1. ファイル先頭に追加：**
+```javascript
+const SpamDetector = require('./spam-detector');
+const ContentFilter = require('./content-filter');
+
+const spamDetector = new SpamDetector(db);
+const contentFilter = new ContentFilter();
+```
+
+**2. モデレーションログテーブルを追加：**
+```javascript
+db.exec(`
+  CREATE TABLE IF NOT EXISTS moderation_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    reason TEXT,
+    moderator_id TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+```
+
+**3. /ai コマンドにスパムチェックとフィルタリングを追加：**
+```javascript
+if (interaction.commandName === 'ai') {
+  const userId = interaction.user.id;
+  const userMessage = interaction.options.getString('message');
+
+  // スパムチェック
+  const penalty = spamDetector.checkPenalty(userId);
+  if (penalty.banned) {
+    await interaction.reply({ content: `⏸️ 現在ペナルティ中です。あと${penalty.minutesLeft}分お待ちください。`, ephemeral: true });
+    return;
+  }
+
+  const spamCheck = await spamDetector.checkSpam(userId, userMessage);
+  if (spamCheck.isSpam) {
+    await interaction.reply({ content: `⚠️ ${spamCheck.reason}\n少し時間を置いてからお試しください。`, ephemeral: true });
+    return;
+  }
+
+  // コンテンツフィルタリング
+  const filterResult = contentFilter.check(userMessage);
+  if (!filterResult.safe) {
+    await interaction.reply({ content: `⛔ ${filterResult.message}`, ephemeral: true });
+    return;
+  }
+
+  // 以降は第6回と同じAI処理
+  // ...
+}
+```
+
+**4. モデレーションコマンドを追加：**
+```javascript
+if (interaction.commandName === 'moderation') {
+  if (!interaction.member.permissions.has('ManageMessages')) {
+    await interaction.reply({ content: 'このコマンドは管理者のみ使用できます。', ephemeral: true });
+    return;
+  }
+
+  const subcommand = interaction.options.getSubcommand();
+
+  if (subcommand === 'logs') {
+    const limit = interaction.options.getInteger('limit') || 10;
+    const stmt = db.prepare(`SELECT * FROM moderation_logs ORDER BY created_at DESC LIMIT ?`);
+    const logs = stmt.all(limit);
+    
+    if (logs.length === 0) {
+      await interaction.reply('モデレーションログはありません。');
+      return;
+    }
+    
+    let message = `**📋 モデレーションログ（直近${limit}件）**\n\n`;
+    logs.forEach(log => {
+      const date = new Date(log.created_at).toLocaleString('ja-JP');
+      message += `${date}\nユーザー: <@${log.user_id}>\nアクション: ${log.action}\n理由: ${log.reason}\n\n`;
+    });
+    
+    await interaction.reply(message);
+  }
+
+  if (subcommand === 'unban') {
+    const targetUser = interaction.options.getUser('user');
+    await spamDetector.removePenalty(targetUser.id);
+    const logStmt = db.prepare(`INSERT INTO moderation_logs (user_id, action, reason, moderator_id) VALUES (?, 'penalty_removed', 'manual_unban', ?)`);
+    logStmt.run(targetUser.id, interaction.user.id);
+    await interaction.reply(`✅ <@${targetUser.id}> のペナルティを解除しました。`);
+  }
+}
+```
+
+---
+
+### register-commands.js の変更点
+
+**commands配列に以下を追加：**
+```javascript
+{
+  name: 'moderation',
+  description: 'モデレーション機能（管理者のみ）',
+  options: [
+    {
+      name: 'logs',
+      description: 'モデレーションログを表示',
+      type: 1,
+      options: [{ name: 'limit', description: '表示件数', type: 4, required: false }]
+    },
+    {
+      name: 'unban',
+      description: 'ペナルティを解除',
+      type: 1,
+      options: [{ name: 'user', description: '対象ユーザー', type: 6, required: true }]
+    }
+  ]
+},
+{
+  name: 'report',
+  description: 'ユーザーを通報します',
+  options: [
+    { name: 'user', description: '通報するユーザー', type: 6, required: true },
+    { name: 'reason', description: '理由', type: 3, required: true }
+  ]
+}
+```
+
+これで第7回は完成です！
+

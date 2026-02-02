@@ -860,3 +860,199 @@ try {
 - プロセス管理（PM2）
 
 **👉 Bot を24時間稼働させます！**
+---
+
+## 📦 第8回の完成版ソースコード
+
+### ファイル構成
+第7回と同じファイル構成です。新規ファイルはありません。
+
+---
+
+### index.js の主な変更点
+
+**第7回のindex.jsをベースに以下を追加・変更：**
+
+**1. エラーログテーブルを追加：**
+```javascript
+db.exec(`
+  CREATE TABLE IF NOT EXISTS error_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    command TEXT,
+    error_message TEXT,
+    stack_trace TEXT,
+    user_id TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+```
+
+**2. エラーログ記録関数を追加：**
+```javascript
+function logError(command, error, userId = null) {
+  try {
+    const stmt = db.prepare('INSERT INTO error_logs (command, error_message, stack_trace, user_id) VALUES (?, ?, ?, ?)');
+    stmt.run(command, error.message, error.stack, userId);
+  } catch (logErr) {
+    console.error('エラーログの記録に失敗:', logErr);
+  }
+}
+```
+
+**3. 各コマンドにtry-catchを追加：**
+```javascript
+if (interaction.commandName === 'feeling') {
+  try {
+    const userId = interaction.user.id;
+    const feeling = interaction.options.getString('mood');
+    const note = interaction.options.getString('note') || null;
+
+    const stmt = db.prepare('INSERT INTO feelings (user_id, feeling, note) VALUES (?, ?, ?)');
+    stmt.run(userId, feeling, note);
+
+    const countStmt = db.prepare('SELECT COUNT(*) as count FROM feelings WHERE user_id = ?');
+    const { count } = countStmt.get(userId);
+
+    const emoji = { great: '😊', good: '🙂', okay: '😐', down: '😔', bad: '😢' }[feeling] || '📝';
+
+    let message = `今日の気分を記録しました ${emoji} (累計: ${count}回目)`;
+    if (note) message += `\nメモ: ${note}`;
+
+    await interaction.reply(message);
+  } catch (error) {
+    logError('feeling', error, interaction.user.id);
+    await interaction.reply({ content: '❌ 記録に失敗しました。もう一度お試しください。', ephemeral: true });
+  }
+}
+```
+
+**4. トランザクション処理のコマンドを追加：**
+```javascript
+if (interaction.commandName === 'give-points') {
+  try {
+    const fromUser = interaction.user.id;
+    const toUser = interaction.options.getUser('user').id;
+    const points = interaction.options.getInteger('points');
+
+    // トランザクション開始
+    const transaction = db.transaction(() => {
+      // 送信者のポイントを減らす
+      const deductStmt = db.prepare('UPDATE user_points SET points = points - ? WHERE user_id = ?');
+      const deductResult = deductStmt.run(points, fromUser);
+
+      if (deductResult.changes === 0) {
+        throw new Error('ポイントの減算に失敗しました');
+      }
+
+      // 受信者のポイントを増やす
+      const addStmt = db.prepare('UPDATE user_points SET points = points + ? WHERE user_id = ?');
+      const addResult = addStmt.run(points, toUser);
+
+      if (addResult.changes === 0) {
+        throw new Error('ポイントの加算に失敗しました');
+      }
+
+      // ログを記録
+      const logStmt = db.prepare('INSERT INTO point_transactions (from_user, to_user, points) VALUES (?, ?, ?)');
+      logStmt.run(fromUser, toUser, points);
+    });
+
+    transaction();
+
+    await interaction.reply(`✅ ${points}ポイントを <@${toUser}> に送りました。`);
+  } catch (error) {
+    logError('give-points', error, interaction.user.id);
+    await interaction.reply({ content: '❌ ポイント送信に失敗しました。', ephemeral: true });
+  }
+}
+```
+
+**5. AI応答のフォールバック処理：**
+```javascript
+async function getAIResponse(userMessage, history) {
+  try {
+    const response = await aiHelper.chat(userMessage, history);
+    if (response.success) {
+      return response.message;
+    } else {
+      return getFallbackResponse();
+    }
+  } catch (error) {
+    logError('ai_chat', error);
+    return getFallbackResponse();
+  }
+}
+
+function getFallbackResponse() {
+  const fallbacks = [
+    '今は少し考えがまとまりません... 深呼吸してみませんか？ `/template get breathe`',
+    '申し訳ありません、うまくお答えできませんでした。もう一度教えていただけますか？',
+    'ちょっと言葉が見つかりません... `/sos` で緊急連絡先を確認できます。'
+  ];
+  return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+}
+```
+
+**6. グレースフルシャットダウン（client.login()の直前に追加）：**
+```javascript
+// シグナルハンドラ
+async function gracefulShutdown(signal) {
+  console.log(`\n${signal} を受信しました。終了処理を開始します...`);
+
+  try {
+    // Bot をオフライン状態に
+    if (client.user) {
+      console.log('Botをオフライン状態にしています...');
+      await client.destroy();
+    }
+
+    // データベースを閉じる
+    console.log('データベースを閉じています...');
+    db.close();
+
+    console.log('✅ 正常に終了しました');
+    process.exit(0);
+  } catch (error) {
+    console.error('終了処理中にエラーが発生:', error);
+    process.exit(1);
+  }
+}
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+process.on('unhandledRejection', (error) => {
+  console.error('未処理のPromise拒否:', error);
+  logError('unhandledRejection', error);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('未処理の例外:', error);
+  logError('uncaughtException', error);
+  gracefulShutdown('uncaughtException');
+});
+```
+
+---
+
+### register-commands.js の変更点
+
+**commands配列に以下を追加：**
+```javascript
+{
+  name: 'error-logs',
+  description: 'エラーログを表示（管理者のみ）',
+  options: [{ name: 'limit', description: '表示件数', type: 4, required: false }]
+},
+{
+  name: 'give-points',
+  description: 'ポイントを送ります',
+  options: [
+    { name: 'user', description: '送り先ユーザー', type: 6, required: true },
+    { name: 'points', description: 'ポイント数', type: 4, required: true }
+  ]
+}
+```
+
+これで第8回は完成です！
+

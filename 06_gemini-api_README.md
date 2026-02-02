@@ -792,3 +792,262 @@ AI 機能を安全に運用するために：
 - ログ監視
 
 **👉 Bot を本番環境で安全に動かす準備をします！**
+---
+
+## 📦 第6回の完成版ソースコード
+
+### ファイル構成
+```
+git_practice/
+├── .gitignore
+├── .env
+├── .env.example
+├── package.json
+├── index.js
+├── register-commands.js
+└── ai-helper.js（★新規）
+```
+
+---
+
+### 新規ファイル：ai-helper.js
+```javascript
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
+class AIHelper {
+  constructor(apiKey) {
+    this.genAI = new GoogleGenerativeAI(apiKey);
+    this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    
+    this.systemPrompt = `あなたはメンタルヘルスサポートのための優しいチャットボットです。
+
+【あなたの役割】
+- ユーザーの気持ちに寄り添い、共感的に応答する
+- 専門的な診断や治療はしない（できない）
+- 必要に応じて専門機関への相談を勧める
+- 簡単な対処法や呼吸法などを提案する
+
+【応答のルール】
+1. 短く、分かりやすく（200文字以内）
+2. 共感を示す（「そうなんですね」「辛いですよね」など）
+3. 押し付けない（「〜してみてはいかがでしょうか」など）
+4. 緊急性を感じたら /sos コマンドを案内する
+
+【禁止事項】
+- 診断（「うつ病です」など）
+- 薬の推奨
+- 過度な励まし（「頑張れ」など）
+- カジュアルすぎる言葉遣い`;
+  }
+
+  async chat(userMessage, context = []) {
+    try {
+      let fullPrompt = this.systemPrompt + '\n\n';
+      if (context.length > 0) {
+        fullPrompt += '【これまでの会話】\n';
+        context.forEach(msg => {
+          fullPrompt += `${msg.role}: ${msg.content}\n`;
+        });
+        fullPrompt += '\n';
+      }
+      fullPrompt += `ユーザー: ${userMessage}\n\nあなたの応答:`;
+      
+      const result = await this.model.generateContent(fullPrompt);
+      const response = await result.response;
+      const text = response.text();
+      
+      return {
+        success: true,
+        message: text,
+        tokensUsed: response.usageMetadata?.totalTokenCount || 0
+      };
+    } catch (error) {
+      console.error('AI Error:', error);
+      return {
+        success: false,
+        message: '申し訳ありません。今、少し考えがまとまりません... もう一度お話しいただけますか？',
+        error: error.message
+      };
+    }
+  }
+
+  detectEmergency(message) {
+    const emergencyKeywords = ['死にたい', '消えたい', '自殺', '死ぬ', '終わりにしたい', 'もう無理', '限界'];
+    const lowerMessage = message.toLowerCase();
+    return emergencyKeywords.some(keyword => lowerMessage.includes(keyword));
+  }
+}
+
+module.exports = AIHelper;
+```
+
+---
+
+### index.js の変更点
+
+**第5回のindex.jsをベースに以下を追加：**
+
+**1. ファイル先頭に追加：**
+```javascript
+const AIHelper = require('./ai-helper');
+const aiHelper = new AIHelper(process.env.GEMINI_API_KEY);
+```
+
+**2. データベーステーブルに追加：**
+```javascript
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ai_conversations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS rate_limits (
+    user_id TEXT PRIMARY KEY,
+    count INTEGER DEFAULT 0,
+    reset_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+db.exec(`DELETE FROM ai_conversations WHERE created_at < datetime('now', '-24 hours')`);
+```
+
+**3. レート制限関数を追加：**
+```javascript
+function checkRateLimit(userId) {
+  const now = new Date();
+  const stmt = db.prepare('SELECT count, reset_at FROM rate_limits WHERE user_id = ?');
+  const row = stmt.get(userId);
+
+  if (!row) {
+    const insertStmt = db.prepare('INSERT INTO rate_limits (user_id, count, reset_at) VALUES (?, 1, datetime("now", "+1 hour"))');
+    insertStmt.run(userId);
+    return { allowed: true, remaining: 9 };
+  }
+
+  const resetAt = new Date(row.reset_at);
+  if (now >= resetAt) {
+    const updateStmt = db.prepare('UPDATE rate_limits SET count = 1, reset_at = datetime("now", "+1 hour") WHERE user_id = ?');
+    updateStmt.run(userId);
+    return { allowed: true, remaining: 9 };
+  }
+
+  if (row.count >= 10) {
+    const minutesLeft = Math.ceil((resetAt - now) / 60000);
+    return { allowed: false, minutesLeft };
+  }
+
+  const updateStmt = db.prepare('UPDATE rate_limits SET count = count + 1 WHERE user_id = ?');
+  updateStmt.run(userId);
+  return { allowed: true, remaining: 10 - row.count - 1 };
+}
+```
+
+**4. コマンド処理に追加（client.on('interactionCreate'の中）：**
+```javascript
+if (interaction.commandName === 'ai') {
+  const userId = interaction.user.id;
+  const userMessage = interaction.options.getString('message');
+
+  const rateLimit = checkRateLimit(userId);
+  if (!rateLimit.allowed) {
+    await interaction.reply({ content: `⏰ 1時間に10回までです。あと${rateLimit.minutesLeft}分後に再度お試しください。`, ephemeral: true });
+    return;
+  }
+
+  if (aiHelper.detectEmergency(userMessage)) {
+    await interaction.reply('⚠️ もしもの時は一人で抱え込まないでください。\n`/sos` で緊急連絡先を確認できます。\n\nそれでもお話を聞かせていただきますね...');
+  }
+
+  await interaction.deferReply();
+
+  const historyStmt = db.prepare(`SELECT role, content FROM ai_conversations WHERE user_id = ? ORDER BY created_at DESC LIMIT 10`);
+  const history = historyStmt.all(userId).reverse();
+  const aiResponse = await aiHelper.chat(userMessage, history);
+
+  const saveStmt = db.prepare('INSERT INTO ai_conversations (user_id, role, content) VALUES (?, ?, ?)');
+  saveStmt.run(userId, 'user', userMessage);
+  saveStmt.run(userId, 'assistant', aiResponse.message);
+
+  await interaction.editReply(aiResponse.message + `\n\n_（残り ${rateLimit.remaining} 回）_`);
+}
+
+if (interaction.commandName === 'ai-reset') {
+  const userId = interaction.user.id;
+  const stmt = db.prepare('DELETE FROM ai_conversations WHERE user_id = ?');
+  const result = stmt.run(userId);
+  await interaction.reply(`✅ 会話履歴を削除しました（${result.changes}件）`);
+}
+
+if (interaction.commandName === 'ai-stats') {
+  if (!interaction.member.permissions.has('ManageMessages')) {
+    await interaction.reply({ content: 'このコマンドは管理者のみ使用できます。', ephemeral: true });
+    return;
+  }
+  const totalStmt = db.prepare('SELECT COUNT(*) as count FROM ai_conversations');
+  const { count: totalConversations } = totalStmt.get();
+  const todayStmt = db.prepare(`SELECT COUNT(*) as count FROM ai_conversations WHERE DATE(created_at) = DATE('now', 'localtime')`);
+  const { count: todayConversations } = todayStmt.get();
+  const usersStmt = db.prepare('SELECT COUNT(DISTINCT user_id) as count FROM ai_conversations');
+  const { count: uniqueUsers } = usersStmt.get();
+  let message = '**📊 AI使用統計**\n\n総会話数: ${totalConversations}回\n今日の会話数: ${todayConversations}回\n利用ユーザー数: ${uniqueUsers}人\n';
+  await interaction.reply(message);
+}
+```
+
+---
+
+### register-commands.js の変更点
+
+**第5回のcommands配列に以下を追加：**
+```javascript
+{
+  name: 'ai',
+  description: 'AIと会話します',
+  options: [{ name: 'message', description: 'AIに送るメッセージ', type: 3, required: true }]
+},
+{
+  name: 'ai-reset',
+  description: 'AI会話履歴をリセットします'
+},
+{
+  name: 'ai-stats',
+  description: 'AI使用統計を表示します（管理者のみ）'
+}
+```
+
+---
+
+### .env.example の変更点
+```
+DISCORD_TOKEN=あなたのトークン
+CLIENT_ID=あなたのアプリケーションID
+GUILD_ID=あなたのサーバーID
+GEMINI_API_KEY=あなたのGemini APIキー
+```
+
+---
+
+### package.json の変更点
+```json
+{
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "better-sqlite3": "^9.2.2",
+    "dotenv": "^16.3.1",
+    "@google/generative-ai": "^0.1.3"
+  }
+}
+```
+
+**インストール：**
+```bash
+npm install @google/generative-ai
+```
+
+これで第6回は完成です！
+

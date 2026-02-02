@@ -425,7 +425,7 @@ Discord で：
 4. 必要なら `pm2 restart discord-bot`
 
 ...
-```
+
 
 ---
 
@@ -716,3 +716,369 @@ Discord で：
 ---
 
 **全10回、お疲れさまでした！ 🎊**
+---
+
+## 📦 第10回の完成版ソースコード
+
+### ファイル構成
+```
+git_practice/
+├── .gitignore
+├── .env
+├── .env.example
+├── package.json
+├── package-lock.json
+├── README.md（★新規推奨）
+├── COMMANDS.md（★新規推奨）
+├── OPERATIONS.md（★新規推奨）
+├── index.js
+├── register-commands.js
+├── ai-helper.js
+├── spam-detector.js
+├── content-filter.js
+├── deploy.sh
+├── ecosystem.config.js（★新規推奨）
+└── bot.db
+```
+
+---
+
+### 新規ファイル（推奨）：README.md
+
+**プロジェクトの説明文書：**
+
+```markdown
+# メンタルヘルスサポート Discord Bot
+
+メンタル系サーバー向けの支援Botです。
+
+## 機能
+
+### 基本機能
+- `/hello` - 挨拶
+- `/save` - メッセージ保存
+- `/read` - メッセージ読み出し
+
+### 気分記録
+- `/feeling` - 気分を記録
+- `/count` - 記録の統計表示
+
+### テンプレート機能
+- `/template get [キー]` - テンプレート取得
+- `/template list` - 一覧表示
+- `/template add` - 追加（管理者のみ）
+- `/template delete` - 削除（管理者のみ）
+
+### キーワード反応
+- 特定のキーワードに自動で反応
+- 緊急キーワードには優先的に対応
+
+### AI会話
+- `/ai [メッセージ]` - AIと会話
+- `/ai-reset` - 会話履歴リセット
+- `/ai-stats` - 使用統計（管理者のみ）
+
+### セキュリティ
+- スパム検出
+- コンテンツフィルタリング
+- モデレーション機能
+
+## セットアップ
+
+1. 依存パッケージのインストール
+```bash
+npm install
+```
+
+2. 環境変数の設定
+```bash
+cp .env.example .env
+# .env を編集して、トークンとAPIキーを設定
+```
+
+3. コマンドの登録
+```bash
+node register-commands.js
+```
+
+4. Botの起動
+```bash
+node index.js
+```
+
+## 本番環境へのデプロイ
+
+```bash
+./deploy.sh
+```
+
+詳細は `OPERATIONS.md` を参照してください。
+
+## ライセンス
+
+MIT License
+```
+
+---
+
+### 新規ファイル（推奨）：COMMANDS.md
+
+**コマンドリファレンス：**
+
+```markdown
+# コマンドリファレンス
+
+## ユーザー向けコマンド
+
+### /hello
+挨拶します。
+
+### /feeling [mood] [note]
+今の気分を記録します。
+- `mood`: 気分（great/good/okay/down/bad）
+- `note`: メモ（任意）
+
+### /count
+気分記録の統計を表示します。
+
+### /template get [key]
+テンプレートを取得します。
+- `key`: テンプレートのキー
+
+### /template list
+登録されているテンプレート一覧を表示します。
+
+### /sos
+緊急連絡先を表示します。
+
+### /ai [message]
+AIと会話します。
+- `message`: AIに送るメッセージ
+- 1時間に10回まで
+
+### /ai-reset
+AI会話履歴をリセットします。
+
+## 管理者向けコマンド
+
+### /template add [key] [content] [category]
+テンプレートを追加します。
+- 権限: メッセージ管理
+
+### /template delete [key]
+テンプレートを削除します。
+- 権限: メッセージ管理
+
+### /keyword add [keyword] [template] [priority]
+キーワード反応を追加します。
+- 権限: メッセージ管理
+
+### /keyword list
+キーワード一覧を表示します。
+- 権限: メッセージ管理
+
+### /keyword delete [id]
+キーワードを削除します。
+- 権限: メッセージ管理
+
+### /ai-stats
+AI使用統計を表示します。
+- 権限: メッセージ管理
+
+### /moderation logs [limit]
+モデレーションログを表示します。
+- 権限: メッセージ管理
+
+### /moderation unban [user]
+ペナルティを解除します。
+- 権限: メッセージ管理
+
+### /error-logs [limit]
+エラーログを表示します。
+- 権限: メッセージ管理
+```
+
+---
+
+### 新規ファイル（推奨）：OPERATIONS.md
+
+**運用マニュアル：**
+
+```markdown
+# 運用マニュアル
+
+## 日常運用
+
+### Botの状態確認
+```bash
+pm2 status
+```
+
+### ログの確認
+```bash
+# リアルタイムでログを見る
+pm2 logs discord-bot
+
+# 最新のログを見る
+pm2 logs discord-bot --lines 100
+```
+
+### 再起動
+```bash
+pm2 restart discord-bot
+```
+
+## デプロイ手順
+
+1. ローカルで変更をコミット
+```bash
+git add .
+git commit -m "説明"
+git push
+```
+
+2. サーバーでデプロイスクリプトを実行
+```bash
+ssh user@server
+cd git_practice
+./deploy.sh
+```
+
+## トラブルシューティング
+
+### Botが反応しない
+1. PM2の状態を確認
+```bash
+pm2 status
+```
+
+2. エラーログを確認
+```bash
+pm2 logs discord-bot --err
+```
+
+3. 必要に応じて再起動
+```bash
+pm2 restart discord-bot
+```
+
+### コマンドが反映されない
+1. コマンドを再登録
+```bash
+node register-commands.js
+```
+
+2. Botを再起動
+```bash
+pm2 restart discord-bot
+```
+
+### データベースエラー
+1. データベースファイルの確認
+```bash
+ls -la bot.db
+```
+
+2. バックアップから復元
+```bash
+cp backups/bot.db.backup bot.db
+```
+
+## バックアップ
+
+### 手動バックアップ
+```bash
+cp bot.db backups/bot.db.$(date +%Y%m%d_%H%M%S)
+```
+
+### 自動バックアップ（cron）
+```bash
+crontab -e
+```
+
+以下を追加：
+```
+0 3 * * * cd /home/user/git_practice && cp bot.db backups/bot.db.$(date +\%Y\%m\%d)
+```
+
+## モニタリング
+
+### CPU/メモリ使用状況
+```bash
+pm2 monit
+```
+
+### データベースサイズ
+```bash
+du -h bot.db
+```
+
+## セキュリティ
+
+### 定期的な確認事項
+- [ ] ペナルティログの確認
+- [ ] モデレーションログの確認
+- [ ] エラーログの確認
+- [ ] スパム検出状況の確認
+
+### 緊急対応
+悪質なユーザーが発生した場合：
+```bash
+# 該当ユーザーのIDを確認してから
+# /moderation ban コマンドを使用
+# または直接データベースから削除
+```
+```
+
+---
+
+### ecosystem.config.js（PM2設定）
+
+```javascript
+module.exports = {
+  apps: [{
+    name: 'discord-bot',
+    script: 'index.js',
+    instances: 1,
+    autorestart: true,
+    watch: false,
+    max_memory_restart: '500M',
+    env: {
+      NODE_ENV: 'production'
+    },
+    error_file: './logs/err.log',
+    out_file: './logs/out.log',
+    log_file: './logs/combined.log',
+    time: true,
+    // 再起動の設定
+    min_uptime: '10s',
+    max_restarts: 10,
+    // クラッシュ時の動作
+    restart_delay: 4000,
+    // ログローテーション（pm2-logrotateが必要）
+    merge_logs: true,
+    log_date_format: 'YYYY-MM-DD HH:mm:ss Z'
+  }]
+};
+```
+
+---
+
+## 完成おめでとうございます！🎉
+
+全10回のハンズオンで、以下を習得しました：
+
+✅ Node.js / Discord.js の基礎  
+✅ SQLite によるデータ管理  
+✅ Git / GitHub での開発フロー  
+✅ AI API（Gemini）の統合  
+✅ セキュリティ対策  
+✅ エラーハンドリング  
+✅ 本番環境へのデプロイ  
+
+**次のステップ：**
+- 機能の追加（リマインダー、統計グラフなど）
+- UIの改善（ボタン、セレクトメニュー）
+- 他のサーバーでの運用
+- コミュニティへの貢献
+

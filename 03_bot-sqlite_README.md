@@ -694,3 +694,193 @@ node register-commands.js
 - データの集計を学ぶ
 
 **👉 メンタル系 Bot らしい機能を作り始めます！**
+---
+
+## 📦 この回の完成版ソースコード
+
+### ファイル構成
+```
+git_practice/
+├── .gitignore
+├── .env
+├── .env.example
+├── package.json
+├── index.js
+└── register-commands.js
+```
+
+---
+
+### index.js
+```javascript
+// .env ファイルから環境変数を読み込む
+require('dotenv').config();
+const { Client, GatewayIntentBits } = require('discord.js');
+const Database = require('better-sqlite3');
+
+// データベース接続
+const db = new Database('bot.db');
+
+// テーブルがなければ作成
+db.exec(`
+  CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+console.log('データベース準備完了');
+
+// Bot クライアントを作成
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
+});
+
+// Bot が起動したときに実行される
+client.once('ready', () => {
+  console.log(`${client.user.tag} でログインしました！`);
+});
+
+// コマンドが実行されたときの処理
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+
+  if (interaction.commandName === 'hello') {
+    await interaction.reply('こんにちは！今日も頑張りましょう 😊');
+  }
+
+  if (interaction.commandName === 'save') {
+    const message = interaction.options.getString('message');
+    const userId = interaction.user.id;
+
+    // データを保存
+    const stmt = db.prepare('INSERT INTO messages (user_id, content) VALUES (?, ?)');
+    stmt.run(userId, message);
+
+    await interaction.reply('メッセージを記録しました 📝');
+  }
+
+  if (interaction.commandName === 'read') {
+    const userId = interaction.user.id;
+
+    // 最新のメッセージを取得
+    const stmt = db.prepare('SELECT content FROM messages WHERE user_id = ? ORDER BY created_at DESC LIMIT 1');
+    const row = stmt.get(userId);
+
+    if (row) {
+      await interaction.reply(`記録されたメッセージ: ${row.content}`);
+    } else {
+      await interaction.reply('まだメッセージが記録されていません');
+    }
+  }
+});
+
+// Discord にログイン
+client.login(process.env.DISCORD_TOKEN);
+```
+
+---
+
+### register-commands.js
+```javascript
+require('dotenv').config();
+const { REST, Routes } = require('discord.js');
+
+const commands = [
+  {
+    name: 'hello',
+    description: '挨拶します'
+  },
+  {
+    name: 'save',
+    description: 'メッセージを保存します',
+    options: [
+      {
+        name: 'message',
+        description: '保存するメッセージ',
+        type: 3, // STRING型
+        required: true
+      }
+    ]
+  },
+  {
+    name: 'read',
+    description: '最後に保存したメッセージを読み出します'
+  }
+];
+
+const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+
+(async () => {
+  try {
+    console.log('コマンドを登録中...');
+    
+    await rest.put(
+      Routes.applicationGuildCommands(
+        process.env.CLIENT_ID,
+        process.env.GUILD_ID
+      ),
+      { body: commands }
+    );
+    
+    console.log('コマンド登録完了！');
+  } catch (error) {
+    console.error(error);
+  }
+})();
+```
+
+---
+
+### .env.example
+```
+DISCORD_TOKEN=あなたのトークン
+CLIENT_ID=あなたのアプリケーションID
+GUILD_ID=あなたのサーバーID
+```
+
+**注意：** 実際に使う `.env` ファイルは `.env.example` をコピーして作成し、実際の値を入れてください。
+
+---
+
+### .gitignore
+```
+node_modules
+.env
+bot.db
+*.db
+```
+
+---
+
+### package.json
+```json
+{
+  "name": "git_practice",
+  "version": "1.0.0",
+  "description": "Discord Bot ハンズオン",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "better-sqlite3": "^9.2.2",
+    "dotenv": "^16.3.1"
+  }
+}
+```
+
+**インストール方法：**
+```bash
+npm install
+```
+
+これで第3回は完成です！
+

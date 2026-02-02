@@ -916,3 +916,500 @@ FOREIGN KEY (template_key) REFERENCES templates(key)
 - コンテキストを理解した応答
 
 **👉 Bot が本当に「会話」できるようになります！**
+---
+
+## 📦 第5回の完成版ソースコード
+
+### ファイル構成
+```
+git_practice/
+├── .gitignore
+├── .env
+├── .env.example
+├── package.json
+├── index.js
+├── register-commands.js
+└── bot.db（自動生成）
+```
+
+---
+
+### index.js
+```
+require('dotenv').config();
+const { Client, GatewayIntentBits } = require('discord.js');
+const Database = require('better-sqlite3');
+
+const db = new Database('bot.db');
+
+// 既存のテーブル
+db.exec(`
+  CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS feelings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    feeling TEXT NOT NULL,
+    note TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+// 定型メッセージ用テーブル
+db.exec(`
+  CREATE TABLE IF NOT EXISTS templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT NOT NULL UNIQUE,
+    content TEXT NOT NULL,
+    category TEXT,
+    created_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+// キーワード反応用テーブル
+db.exec(`
+  CREATE TABLE IF NOT EXISTS keyword_responses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    keyword TEXT NOT NULL,
+    template_key TEXT NOT NULL,
+    priority INTEGER DEFAULT 0,
+    enabled INTEGER DEFAULT 1,
+    FOREIGN KEY (template_key) REFERENCES templates(key)
+  )
+`);
+
+console.log('データベース準備完了');
+
+// 初期テンプレートを登録
+function initializeTemplates() {
+  const defaultTemplates = [
+    {
+      key: 'breathe',
+      content: '🌬️ **深呼吸してみましょう**\n\n4秒吸って... 7秒止めて... 8秒かけて吐く...\n\nゆっくり3回繰り返してみてください。',
+      category: 'relaxation'
+    },
+    {
+      key: 'comfort',
+      content: '🤗 **大丈夫です**\n\n辛い気持ち、よく話してくれましたね。\nあなたは一人じゃありません。\n少しずつ、一緒に乗り越えていきましょう。',
+      category: 'comfort'
+    },
+    {
+      key: 'emergency',
+      content: '📞 **緊急連絡先**\n\n• いのちの電話: 0570-783-556 (24時間)\n• こころの健康相談: 0570-064-556\n• SNS相談: https://www.mhlw.go.jp/mamorouyokokoro/\n\n一人で抱え込まないでください。',
+      category: 'emergency'
+    },
+    {
+      key: 'grounding',
+      content: '🌍 **グラウンディング法**\n\n周りを見渡して、次のものを探してみてください：\n• 5つの見えるもの\n• 4つの触れるもの\n• 3つの聞こえる音\n• 2つの匂い\n• 1つの味\n\n「今ここ」に戻ってきましょう。',
+      category: 'relaxation'
+    }
+  ];
+
+  const insertStmt = db.prepare(`
+    INSERT OR IGNORE INTO templates (key, content, category) 
+    VALUES (?, ?, ?)
+  `);
+
+  defaultTemplates.forEach(template => {
+    insertStmt.run(template.key, template.content, template.category);
+  });
+
+  console.log('初期テンプレート準備完了');
+}
+
+// 初期キーワードを登録
+function initializeKeywords() {
+  const defaultKeywords = [
+    { keyword: '辛い', template_key: 'comfort', priority: 10 },
+    { keyword: 'つらい', template_key: 'comfort', priority: 10 },
+    { keyword: '苦しい', template_key: 'breathe', priority: 8 },
+    { keyword: '息苦しい', template_key: 'breathe', priority: 10 },
+    { keyword: 'パニック', template_key: 'grounding', priority: 10 },
+    { keyword: '死にたい', template_key: 'emergency', priority: 100 },
+    { keyword: '消えたい', template_key: 'emergency', priority: 100 }
+  ];
+
+  const insertStmt = db.prepare(`
+    INSERT OR IGNORE INTO keyword_responses (keyword, template_key, priority) 
+    VALUES (?, ?, ?)
+  `);
+
+  defaultKeywords.forEach(kw => {
+    insertStmt.run(kw.keyword, kw.template_key, kw.priority);
+  });
+
+  console.log('キーワード反応準備完了');
+}
+
+initializeTemplates();
+initializeKeywords();
+
+// 時間差を人間に読みやすい形式で返す
+function getTimeDiff(timestamp) {
+  const now = new Date();
+  const past = new Date(timestamp);
+  const diffMs = now - past;
+  const diffMinutes = Math.floor(diffMs / 60000);
+
+  if (diffMinutes < 1) return '今';
+  if (diffMinutes < 60) return `${diffMinutes}分前`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}時間前`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}日前`;
+}
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
+});
+
+client.once('ready', () => {
+  console.log(`${client.user.tag} でログインしました！`);
+});
+
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+
+  if (interaction.commandName === 'hello') {
+    await interaction.reply('こんにちは！今日も頑張りましょう 😊');
+  }
+
+  if (interaction.commandName === 'save') {
+    const message = interaction.options.getString('message');
+    const userId = interaction.user.id;
+    const stmt = db.prepare('INSERT INTO messages (user_id, content) VALUES (?, ?)');
+    stmt.run(userId, message);
+    await interaction.reply('メッセージを記録しました 📝');
+  }
+
+  if (interaction.commandName === 'read') {
+    const userId = interaction.user.id;
+    const stmt = db.prepare('SELECT content FROM messages WHERE user_id = ? ORDER BY created_at DESC LIMIT 1');
+    const row = stmt.get(userId);
+    if (row) {
+      await interaction.reply(`記録されたメッセージ: ${row.content}`);
+    } else {
+      await interaction.reply('まだメッセージが記録されていません');
+    }
+  }
+
+  if (interaction.commandName === 'feeling') {
+    const userId = interaction.user.id;
+    const feeling = interaction.options.getString('mood');
+    const note = interaction.options.getString('note') || null;
+    const stmt = db.prepare('INSERT INTO feelings (user_id, feeling, note) VALUES (?, ?, ?)');
+    stmt.run(userId, feeling, note);
+    const countStmt = db.prepare('SELECT COUNT(*) as count FROM feelings WHERE user_id = ?');
+    const { count } = countStmt.get(userId);
+    const emoji = { great: '😊', good: '🙂', okay: '😐', down: '😔', bad: '😢' }[feeling] || '📝';
+    let message = `今日の気分を記録しました ${emoji} (累計: ${count}回目)`;
+    if (note) message += `\nメモ: ${note}`;
+    await interaction.reply(message);
+  }
+
+  if (interaction.commandName === 'count') {
+    const userId = interaction.user.id;
+    const totalStmt = db.prepare('SELECT COUNT(*) as count FROM feelings WHERE user_id = ?');
+    const { count: totalCount } = totalStmt.get(userId);
+    if (totalCount === 0) {
+      await interaction.reply('まだ記録がありません。/feeling で気分を記録してみましょう！');
+      return;
+    }
+    const todayStmt = db.prepare(`SELECT COUNT(*) as count FROM feelings WHERE user_id = ? AND DATE(created_at) = DATE('now', 'localtime')`);
+    const { count: todayCount } = todayStmt.get(userId);
+    const weekStmt = db.prepare(`SELECT COUNT(*) as count FROM feelings WHERE user_id = ? AND DATE(created_at) >= DATE('now', '-7 days', 'localtime')`);
+    const { count: weekCount } = weekStmt.get(userId);
+    const feelingStmt = db.prepare(`SELECT feeling, COUNT(*) as count FROM feelings WHERE user_id = ? GROUP BY feeling`);
+    const feelingCounts = feelingStmt.all(userId);
+    const latestStmt = db.prepare(`SELECT feeling, note, created_at FROM feelings WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`);
+    const latest = latestStmt.get(userId);
+    const timeDiff = getTimeDiff(latest.created_at);
+    const emojiMap = { great: '😊', good: '🙂', okay: '😐', down: '😔', bad: '😢' };
+    let message = '**あなたの記録**\n';
+    message += `📊 総記録数: ${totalCount}回\n📅 今日の記録: ${todayCount}回\n📆 過去7日間: ${weekCount}回\n\n**気分の内訳**\n`;
+    feelingCounts.forEach(({ feeling, count }) => {
+      const emoji = emojiMap[feeling] || '📝';
+      const percentage = Math.round((count / totalCount) * 100);
+      message += `${emoji} ${feeling}: ${count}回 (${percentage}%)\n`;
+    });
+    message += `\n最終記録: ${latest.feeling} (${timeDiff})`;
+    if (latest.note) message += `\nメモ: ${latest.note}`;
+    await interaction.reply(message);
+  }
+
+  if (interaction.commandName === 'template') {
+    const subcommand = interaction.options.getSubcommand();
+    if (subcommand === 'get') {
+      const key = interaction.options.getString('key');
+      const stmt = db.prepare('SELECT content FROM templates WHERE key = ?');
+      const row = stmt.get(key);
+      if (row) {
+        await interaction.reply(row.content);
+      } else {
+        await interaction.reply(`テンプレート '${key}' が見つかりません。/template list で一覧を確認してください。`);
+      }
+    }
+    if (subcommand === 'list') {
+      const stmt = db.prepare('SELECT key, category FROM templates ORDER BY category, key');
+      const templates = stmt.all();
+      if (templates.length === 0) {
+        await interaction.reply('登録されているテンプレートはありません。');
+        return;
+      }
+      const grouped = {};
+      templates.forEach(t => {
+        const cat = t.category || 'その他';
+        if (!grouped[cat]) grouped[cat] = [];
+        grouped[cat].push(t.key);
+      });
+      let message = '**📝 登録されているテンプレート**\n\n';
+      for (const [category, keys] of Object.entries(grouped)) {
+        message += `**${category}**\n`;
+        keys.forEach(key => { message += `• \`${key}\`\n`; });
+        message += '\n';
+      }
+      message += '使い方: `/template get <キー>`';
+      await interaction.reply(message);
+    }
+    if (subcommand === 'add') {
+      if (!interaction.member.permissions.has('ManageMessages')) {
+        await interaction.reply({ content: 'このコマンドは管理者のみ使用できます。', ephemeral: true });
+        return;
+      }
+      const key = interaction.options.getString('key');
+      const content = interaction.options.getString('content');
+      const category = interaction.options.getString('category') || 'その他';
+      const createdBy = interaction.user.id;
+      try {
+        const stmt = db.prepare(`INSERT INTO templates (key, content, category, created_by) VALUES (?, ?, ?, ?)`);
+        stmt.run(key, content, category, createdBy);
+        await interaction.reply(`✅ テンプレート '${key}' を登録しました。`);
+      } catch (error) {
+        if (error.message.includes('UNIQUE')) {
+          await interaction.reply({ content: `❌ テンプレート '${key}' は既に存在します。`, ephemeral: true });
+        } else {
+          await interaction.reply({ content: '❌ 登録に失敗しました。', ephemeral: true });
+        }
+      }
+    }
+    if (subcommand === 'delete') {
+      if (!interaction.member.permissions.has('ManageMessages')) {
+        await interaction.reply({ content: 'このコマンドは管理者のみ使用できます。', ephemeral: true });
+        return;
+      }
+      const key = interaction.options.getString('key');
+      const stmt = db.prepare('DELETE FROM templates WHERE key = ?');
+      const result = stmt.run(key);
+      if (result.changes > 0) {
+        await interaction.reply(`✅ テンプレート '${key}' を削除しました。`);
+      } else {
+        await interaction.reply({ content: `❌ テンプレート '${key}' が見つかりません。`, ephemeral: true });
+      }
+    }
+  }
+
+  if (interaction.commandName === 'sos') {
+    const stmt = db.prepare('SELECT content FROM templates WHERE key = ?');
+    const row = stmt.get('emergency');
+    if (row) {
+      await interaction.reply(row.content);
+    } else {
+      await interaction.reply('📞 緊急連絡先\n\n• いのちの電話: 0570-783-556 (24時間)\n• こころの健康相談: 0570-064-556\n\n一人で抱え込まないでください。');
+    }
+  }
+
+  if (interaction.commandName === 'keyword') {
+    if (!interaction.member.permissions.has('ManageMessages')) {
+      await interaction.reply({ content: 'このコマンドは管理者のみ使用できます。', ephemeral: true });
+      return;
+    }
+    const subcommand = interaction.options.getSubcommand();
+    if (subcommand === 'add') {
+      const keyword = interaction.options.getString('keyword');
+      const templateKey = interaction.options.getString('template');
+      const priority = interaction.options.getInteger('priority') || 5;
+      const checkStmt = db.prepare('SELECT key FROM templates WHERE key = ?');
+      if (!checkStmt.get(templateKey)) {
+        await interaction.reply({ content: `❌ テンプレート '${templateKey}' が見つかりません。`, ephemeral: true });
+        return;
+      }
+      const stmt = db.prepare(`INSERT INTO keyword_responses (keyword, template_key, priority) VALUES (?, ?, ?)`);
+      stmt.run(keyword, templateKey, priority);
+      await interaction.reply(`✅ キーワード '${keyword}' を登録しました（優先度: ${priority}）`);
+    }
+    if (subcommand === 'list') {
+      const stmt = db.prepare(`SELECT id, keyword, template_key, priority, enabled FROM keyword_responses ORDER BY priority DESC, keyword`);
+      const keywords = stmt.all();
+      if (keywords.length === 0) {
+        await interaction.reply('登録されているキーワードはありません。');
+        return;
+      }
+      let message = '**🔑 登録されているキーワード**\n\n';
+      keywords.forEach(kw => {
+        const status = kw.enabled ? '✅' : '❌';
+        message += `${status} ID:${kw.id} | 「${kw.keyword}」 → \`${kw.template_key}\` (優先度: ${kw.priority})\n`;
+      });
+      await interaction.reply(message);
+    }
+    if (subcommand === 'delete') {
+      const id = interaction.options.getInteger('id');
+      const stmt = db.prepare('DELETE FROM keyword_responses WHERE id = ?');
+      const result = stmt.run(id);
+      if (result.changes > 0) {
+        await interaction.reply(`✅ キーワードID ${id} を削除しました。`);
+      } else {
+        await interaction.reply({ content: `❌ キーワードID ${id} が見つかりません。`, ephemeral: true });
+      }
+    }
+  }
+});
+
+// オートコンプリートのハンドラ
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isAutocomplete()) return;
+  if (interaction.commandName === 'template') {
+    const focusedValue = interaction.options.getFocused();
+    const stmt = db.prepare('SELECT key FROM templates WHERE key LIKE ? LIMIT 25');
+    const choices = stmt.all(`%${focusedValue}%`);
+    await interaction.respond(choices.map(choice => ({ name: choice.key, value: choice.key })));
+  }
+});
+
+// メッセージイベントのハンドラ
+client.on('messageCreate', async message => {
+  if (message.author.bot) return;
+  if (message.system) return;
+  const content = message.content.toLowerCase();
+  const stmt = db.prepare(`
+    SELECT kr.keyword, kr.template_key, kr.priority, t.content 
+    FROM keyword_responses kr
+    JOIN templates t ON kr.template_key = t.key
+    WHERE kr.enabled = 1 AND LOWER(?) LIKE '%' || LOWER(kr.keyword) || '%'
+    ORDER BY kr.priority DESC, kr.keyword DESC LIMIT 1
+  `);
+  const match = stmt.get(content);
+  if (match) {
+    if (match.priority >= 100) {
+      await message.reply(match.content);
+      return;
+    }
+    if (match.priority >= 10) {
+      await message.reply({ content: `${match.content}\n\n必要であれば \`/sos\` で緊急連絡先を確認できます。`, allowedMentions: { repliedUser: false } });
+      return;
+    }
+    await message.reply({ content: `💡 \`/template get ${match.template_key}\` が役立つかもしれません。`, allowedMentions: { repliedUser: false } });
+  }
+});
+
+client.login(process.env.DISCORD_TOKEN);
+```
+
+---
+
+### register-commands.js
+```
+require('dotenv').config();
+const { REST, Routes } = require('discord.js');
+
+const commands = [
+  { name: 'hello', description: '挨拶します' },
+  { name: 'save', description: 'メッセージを保存します', options: [{ name: 'message', description: '保存するメッセージ', type: 3, required: true }] },
+  { name: 'read', description: '最後に保存したメッセージを読み出します' },
+  { name: 'feeling', description: '今の気分を記録します', options: [
+    { name: 'mood', description: '気分を選んでください', type: 3, required: true, choices: [
+      { name: '😊 とても良い (great)', value: 'great' }, { name: '🙂 良い (good)', value: 'good' },
+      { name: '😐 普通 (okay)', value: 'okay' }, { name: '😔 少し辛い (down)', value: 'down' }, { name: '😢 辛い (bad)', value: 'bad' }
+    ]},
+    { name: 'note', description: 'メモ（任意）', type: 3, required: false }
+  ]},
+  { name: 'count', description: '記録の統計を表示します' },
+  { name: 'template', description: '定型メッセージを管理します', options: [
+    { name: 'get', description: 'テンプレートを取得', type: 1, options: [{ name: 'key', description: 'テンプレートのキー', type: 3, required: true, autocomplete: true }] },
+    { name: 'list', description: '登録されているテンプレート一覧', type: 1 },
+    { name: 'add', description: 'テンプレートを追加（管理者のみ）', type: 1, options: [
+      { name: 'key', description: 'テンプレートのキー', type: 3, required: true },
+      { name: 'content', description: 'メッセージ内容', type: 3, required: true },
+      { name: 'category', description: 'カテゴリ', type: 3, required: false }
+    ]},
+    { name: 'delete', description: 'テンプレートを削除（管理者のみ）', type: 1, options: [{ name: 'key', description: '削除するテンプレートのキー', type: 3, required: true }] }
+  ]},
+  { name: 'sos', description: '緊急時の連絡先を表示します' },
+  { name: 'keyword', description: 'キーワード反応を管理します（管理者のみ）', options: [
+    { name: 'add', description: 'キーワードを追加', type: 1, options: [
+      { name: 'keyword', description: '反応するキーワード', type: 3, required: true },
+      { name: 'template', description: 'テンプレートキー', type: 3, required: true },
+      { name: 'priority', description: '優先度（1-100、高いほど優先）', type: 4, required: false }
+    ]},
+    { name: 'list', description: '登録されているキーワード一覧', type: 1 },
+    { name: 'delete', description: 'キーワードを削除', type: 1, options: [{ name: 'id', description: 'キーワードID', type: 4, required: true }] }
+  ]}
+];
+
+const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+(async () => {
+  try {
+    console.log('コマンドを登録中...');
+    await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), { body: commands });
+    console.log('コマンド登録完了！');
+  } catch (error) {
+    console.error(error);
+  }
+})();
+```
+
+---
+
+### .env.example
+```
+DISCORD_TOKEN=あなたのトークン
+CLIENT_ID=あなたのアプリケーションID
+GUILD_ID=あなたのサーバーID
+```
+
+---
+
+### .gitignore
+```
+node_modules
+.env
+bot.db
+*.db
+```
+
+---
+
+### package.json
+```json
+{
+  "name": "git_practice",
+  "version": "1.0.0",
+  "description": "Discord Bot ハンズオン",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "better-sqlite3": "^9.2.2",
+    "dotenv": "^16.3.1"
+  }
+}
+```
+
+これで第5回は完成です！
+

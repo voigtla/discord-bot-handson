@@ -713,3 +713,212 @@ find ~/.pm2/logs -type f -mtime +7 -delete
 - 今後の拡張アイデア
 
 **👉 ここまでの学習を総まとめします！**
+---
+
+## 📦 第9回の完成版ソースコード
+
+### ファイル構成
+```
+git_practice/
+├── .gitignore
+├── .env
+├── .env.example
+├── package.json
+├── index.js
+├── register-commands.js
+├── ai-helper.js
+├── spam-detector.js
+├── content-filter.js
+└── deploy.sh（★新規）
+```
+
+---
+
+### 新規ファイル：deploy.sh
+
+**サーバー上で作成するデプロイスクリプト：**
+
+```bash
+#!/bin/bash
+
+# デプロイスクリプト
+# 使い方: ./deploy.sh
+
+echo "🚀 デプロイを開始します..."
+
+# Git から最新のコードを取得
+echo "📥 最新のコードを取得中..."
+git pull origin main
+
+# 依存パッケージのインストール
+echo "📦 パッケージをインストール中..."
+npm install
+
+# コマンドを再登録
+echo "🔧 コマンドを再登録中..."
+node register-commands.js
+
+# PM2 でBotを再起動
+echo "♻️ Botを再起動中..."
+pm2 restart discord-bot || pm2 start index.js --name discord-bot
+
+# ログを表示
+echo "📊 Botの状態:"
+pm2 status
+
+echo "✅ デプロイ完了！"
+echo ""
+echo "ログを確認する: pm2 logs discord-bot"
+echo "停止する: pm2 stop discord-bot"
+echo "削除する: pm2 delete discord-bot"
+```
+
+**実行権限を付与：**
+```bash
+chmod +x deploy.sh
+```
+
+**使用方法：**
+```bash
+./deploy.sh
+```
+
+---
+
+### index.js の変更点
+
+**第8回と基本的に同じです。** デプロイのための変更は不要です。
+
+ただし、本番環境での実行を想定して、以下の点を確認：
+
+1. **環境変数が正しく設定されているか**
+   - `.env` ファイルがサーバー上に存在し、正しい値が入っているか
+   
+2. **ログ出力が適切か**
+   - `console.log()` で重要な情報を出力しているか
+   - エラーログが記録されているか
+
+3. **データベースのパス**
+   - `bot.db` が適切な場所に作成されるか
+   - 権限の問題がないか
+
+---
+
+### サーバー上での環境設定
+
+**1. .envファイルの作成（サーバー上）：**
+```bash
+nano .env
+```
+
+```
+DISCORD_TOKEN=あなたのトークン
+CLIENT_ID=あなたのアプリケーションID
+GUILD_ID=あなたのサーバーID
+GEMINI_API_KEY=あなたのGemini APIキー
+```
+
+**2. PM2の設定ファイル（オプション）：**
+
+`ecosystem.config.js` を作成：
+
+```javascript
+module.exports = {
+  apps: [{
+    name: 'discord-bot',
+    script: 'index.js',
+    instances: 1,
+    autorestart: true,
+    watch: false,
+    max_memory_restart: '500M',
+    env: {
+      NODE_ENV: 'production'
+    },
+    error_file: './logs/err.log',
+    out_file: './logs/out.log',
+    log_file: './logs/combined.log',
+    time: true
+  }]
+};
+```
+
+**PM2で起動（設定ファイル使用）：**
+```bash
+pm2 start ecosystem.config.js
+```
+
+---
+
+### PM2 主要コマンド一覧
+
+**基本操作：**
+```bash
+# 起動
+pm2 start index.js --name discord-bot
+
+# 停止
+pm2 stop discord-bot
+
+# 再起動
+pm2 restart discord-bot
+
+# 削除
+pm2 delete discord-bot
+
+# 状態確認
+pm2 status
+
+# ログ確認
+pm2 logs discord-bot
+
+# リアルタイムモニター
+pm2 monit
+```
+
+**自動起動設定：**
+```bash
+# 現在の状態を保存
+pm2 save
+
+# 自動起動を有効化
+pm2 startup
+
+# 表示されたコマンドを実行（sudoが含まれる場合があります）
+```
+
+---
+
+### トラブルシューティング
+
+**問題1: Botが起動しない**
+```bash
+# ログを確認
+pm2 logs discord-bot
+
+# エラーの内容を確認
+# よくある原因：
+# - .env ファイルがない
+# - 環境変数が間違っている
+# - パッケージがインストールされていない
+```
+
+**問題2: コマンドが反映されない**
+```bash
+# コマンドを再登録
+node register-commands.js
+
+# Botを再起動
+pm2 restart discord-bot
+```
+
+**問題3: データベースエラー**
+```bash
+# データベースファイルの権限を確認
+ls -la bot.db
+
+# 必要に応じて権限を変更
+chmod 644 bot.db
+```
+
+これで第9回は完成です！
+

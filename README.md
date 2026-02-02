@@ -30,6 +30,20 @@ Mac の方は **「PowerShell → ターミナル」** と読み替えればOK�
 | 9 | 本番環境デプロイ | SSH、サーバー準備、PM2で常駐 | [📄 第9回資料](09_ssh-deployment_README.md) |
 | 10 | 通し確認 + 振り返り | 全機能の確認、改善案の整理、次の拡張 | [📄 第10回資料](10_final-review_README.md) |
 
+## 💻 ソースコードサンプル
+
+**各回の完成形のコードはこちら：** [📁 source-code-samples/](source-code-samples/)
+
+前回休んだ方や、途中で詰まった方は、各回のフォルダにある完成形のコードと見比べて進めてください。
+
+**サンプルコードの使い方：**
+- 自分のコードと比較する
+- 前回休んだ場合のキャッチアップに使う
+- エラーが出たときの参考にする
+
+詳しくは [source-code-samples/README.md](source-code-samples/README.md) をご覧ください。
+
+
 ---
 
 ## 🎯 推奨参加ルート

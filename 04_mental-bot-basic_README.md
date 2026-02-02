@@ -689,3 +689,348 @@ git push
 - メンタル系Botらしい実用機能
 
 **👉 実際に使える Bot になってきます！**
+---
+
+## 📦 第4回の完成版ソースコード
+
+### ファイル構成
+```
+git_practice/
+├── .gitignore
+├── .env
+├── .env.example
+├── package.json
+├── index.js
+├── register-commands.js
+└── bot.db（自動生成）
+```
+
+---
+
+### index.js
+```javascript
+require('dotenv').config();
+const { Client, GatewayIntentBits } = require('discord.js');
+const Database = require('better-sqlite3');
+
+const db = new Database('bot.db');
+
+// 既存のテーブルはそのまま
+db.exec(`
+  CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+// 気分記録用の新しいテーブル
+db.exec(`
+  CREATE TABLE IF NOT EXISTS feelings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    feeling TEXT NOT NULL,
+    note TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+console.log('データベース準備完了');
+
+// 時間差を人間に読みやすい形式で返す
+function getTimeDiff(timestamp) {
+  const now = new Date();
+  const past = new Date(timestamp);
+  const diffMs = now - past;
+  const diffMinutes = Math.floor(diffMs / 60000);
+
+  if (diffMinutes < 1) return '今';
+  if (diffMinutes < 60) return `${diffMinutes}分前`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}時間前`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}日前`;
+}
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
+});
+
+client.once('ready', () => {
+  console.log(`${client.user.tag} でログインしました！`);
+});
+
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+
+  if (interaction.commandName === 'hello') {
+    await interaction.reply('こんにちは！今日も頑張りましょう 😊');
+  }
+
+  if (interaction.commandName === 'save') {
+    const message = interaction.options.getString('message');
+    const userId = interaction.user.id;
+
+    const stmt = db.prepare('INSERT INTO messages (user_id, content) VALUES (?, ?)');
+    stmt.run(userId, message);
+
+    await interaction.reply('メッセージを記録しました 📝');
+  }
+
+  if (interaction.commandName === 'read') {
+    const userId = interaction.user.id;
+
+    const stmt = db.prepare('SELECT content FROM messages WHERE user_id = ? ORDER BY created_at DESC LIMIT 1');
+    const row = stmt.get(userId);
+
+    if (row) {
+      await interaction.reply(`記録されたメッセージ: ${row.content}`);
+    } else {
+      await interaction.reply('まだメッセージが記録されていません');
+    }
+  }
+
+  if (interaction.commandName === 'feeling') {
+    const userId = interaction.user.id;
+    const feeling = interaction.options.getString('mood');
+    const note = interaction.options.getString('note') || null;
+
+    // 気分を保存
+    const stmt = db.prepare('INSERT INTO feelings (user_id, feeling, note) VALUES (?, ?, ?)');
+    stmt.run(userId, feeling, note);
+
+    // 総記録数を取得
+    const countStmt = db.prepare('SELECT COUNT(*) as count FROM feelings WHERE user_id = ?');
+    const { count } = countStmt.get(userId);
+
+    // 気分に応じた絵文字
+    const emoji = {
+      great: '😊',
+      good: '🙂',
+      okay: '😐',
+      down: '😔',
+      bad: '😢'
+    }[feeling] || '📝';
+
+    let message = `今日の気分を記録しました ${emoji} (累計: ${count}回目)`;
+    if (note) {
+      message += `\nメモ: ${note}`;
+    }
+
+    await interaction.reply(message);
+  }
+
+  if (interaction.commandName === 'count') {
+    const userId = interaction.user.id;
+
+    // 総記録数
+    const totalStmt = db.prepare('SELECT COUNT(*) as count FROM feelings WHERE user_id = ?');
+    const { count: totalCount } = totalStmt.get(userId);
+
+    if (totalCount === 0) {
+      await interaction.reply('まだ記録がありません。/feeling で気分を記録してみましょう！');
+      return;
+    }
+
+    // 今日の記録数
+    const todayStmt = db.prepare(`
+      SELECT COUNT(*) as count 
+      FROM feelings 
+      WHERE user_id = ? 
+      AND DATE(created_at) = DATE('now', 'localtime')
+    `);
+    const { count: todayCount } = todayStmt.get(userId);
+
+    // 過去7日間の記録数
+    const weekStmt = db.prepare(`
+      SELECT COUNT(*) as count 
+      FROM feelings 
+      WHERE user_id = ? 
+      AND DATE(created_at) >= DATE('now', '-7 days', 'localtime')
+    `);
+    const { count: weekCount } = weekStmt.get(userId);
+
+    // 気分ごとの集計
+    const feelingStmt = db.prepare(`
+      SELECT feeling, COUNT(*) as count 
+      FROM feelings 
+      WHERE user_id = ? 
+      GROUP BY feeling
+    `);
+    const feelingCounts = feelingStmt.all(userId);
+
+    // 最新の記録
+    const latestStmt = db.prepare(`
+      SELECT feeling, note, created_at 
+      FROM feelings 
+      WHERE user_id = ? 
+      ORDER BY created_at DESC 
+      LIMIT 1
+    `);
+    const latest = latestStmt.get(userId);
+
+    const timeDiff = getTimeDiff(latest.created_at);
+
+    // 絵文字マップ
+    const emojiMap = {
+      great: '😊',
+      good: '🙂',
+      okay: '😐',
+      down: '😔',
+      bad: '😢'
+    };
+
+    // 返信メッセージを組み立て
+    let message = '**あなたの記録**\n';
+    message += `📊 総記録数: ${totalCount}回\n`;
+    message += `📅 今日の記録: ${todayCount}回\n`;
+    message += `📆 過去7日間: ${weekCount}回\n\n`;
+
+    message += '**気分の内訳**\n';
+    feelingCounts.forEach(({ feeling, count }) => {
+      const emoji = emojiMap[feeling] || '📝';
+      const percentage = Math.round((count / totalCount) * 100);
+      message += `${emoji} ${feeling}: ${count}回 (${percentage}%)\n`;
+    });
+
+    message += `\n最終記録: ${latest.feeling} (${timeDiff})`;
+
+    if (latest.note) {
+      message += `\nメモ: ${latest.note}`;
+    }
+
+    await interaction.reply(message);
+  }
+});
+
+client.login(process.env.DISCORD_TOKEN);
+```
+
+---
+
+### register-commands.js
+```javascript
+require('dotenv').config();
+const { REST, Routes } = require('discord.js');
+
+const commands = [
+  {
+    name: 'hello',
+    description: '挨拶します'
+  },
+  {
+    name: 'save',
+    description: 'メッセージを保存します',
+    options: [
+      {
+        name: 'message',
+        description: '保存するメッセージ',
+        type: 3,
+        required: true
+      }
+    ]
+  },
+  {
+    name: 'read',
+    description: '最後に保存したメッセージを読み出します'
+  },
+  {
+    name: 'feeling',
+    description: '今の気分を記録します',
+    options: [
+      {
+        name: 'mood',
+        description: '気分を選んでください',
+        type: 3,
+        required: true,
+        choices: [
+          { name: '😊 とても良い (great)', value: 'great' },
+          { name: '🙂 良い (good)', value: 'good' },
+          { name: '😐 普通 (okay)', value: 'okay' },
+          { name: '😔 少し辛い (down)', value: 'down' },
+          { name: '😢 辛い (bad)', value: 'bad' }
+        ]
+      },
+      {
+        name: 'note',
+        description: 'メモ（任意）',
+        type: 3,
+        required: false
+      }
+    ]
+  },
+  {
+    name: 'count',
+    description: '記録の統計を表示します'
+  }
+];
+
+const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+
+(async () => {
+  try {
+    console.log('コマンドを登録中...');
+    
+    await rest.put(
+      Routes.applicationGuildCommands(
+        process.env.CLIENT_ID,
+        process.env.GUILD_ID
+      ),
+      { body: commands }
+    );
+    
+    console.log('コマンド登録完了！');
+  } catch (error) {
+    console.error(error);
+  }
+})();
+```
+
+---
+
+### .env.example
+```
+DISCORD_TOKEN=あなたのトークン
+CLIENT_ID=あなたのアプリケーションID
+GUILD_ID=あなたのサーバーID
+```
+
+---
+
+### .gitignore
+```
+node_modules
+.env
+bot.db
+*.db
+```
+
+---
+
+### package.json
+```json
+{
+  "name": "git_practice",
+  "version": "1.0.0",
+  "description": "Discord Bot ハンズオン",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "better-sqlite3": "^9.2.2",
+    "dotenv": "^16.3.1"
+  }
+}
+```
+
+これで第4回は完成です！
+
