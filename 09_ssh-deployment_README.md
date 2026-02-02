@@ -507,113 +507,303 @@ cat ~/.ssh/gcp-discord-bot.pub | pbcopy
 
 ---
 
-### 2-3. SSH 接続テスト
+### 2-3. SSH 接続テスト（＋管理者権限の準備）
 
-この章では、実際にサーバーに接続してみます。  
-**⚠️ 実行場所に注意：ローカル（あなたのPC）で実行します。**
-
----
-
-#### ステップ1：接続情報を確認する
-
-**必要な情報：**
-1. **ユーザー名**：GCPのSSH認証鍵ページで確認できます
-   - 通常は公開鍵から自動抽出された名前（例：`discord_bot`）
-2. **外部IP**：VMインスタンス一覧で確認
-   - 例：`34.84.123.456`
-3. **秘密鍵のパス**：
-   - Windows: `$env:USERPROFILE\.ssh\gcp-discord-bot`
-   - Mac: `~/.ssh/gcp-discord-bot`
+この章では、  
+**SSH 接続を試す前に「sudo が必ず使える状態」を先に作ります。**  
+この順番で進めないと、あとで必ず詰まります。
 
 ---
 
-#### ステップ2：SSH接続を実行する
+### ステップ1：GCP 側で「管理者ログイン権限」を付与する（最初に必須）
 
-<details>
-<summary><strong>🪟 Windows の場合</strong></summary>
+SSH でログインしたユーザーが `sudo` を使えるかどうかは、  
+**サーバー内ではなく GCP 側の設定で決まります。**
 
-**ローカルPC（Windows PowerShell）で実行：**
+#### 操作手順（GCP Console）
+
+1. GCP Console → **IAM と管理 → IAM**
+2. 自分の Google アカウント（例：`xxx@gmail.com`）を探す
+3. ✏️（編集）をクリック
+4. 次のロールを追加する
+
+- **Compute OS Admin Login**（必須）
+
+5. 保存
+
+この設定を行うことで、  
+**SSH でログインしたユーザーが sudo を使える状態**になります。
+
+---
+
+### ステップ2：SSH 接続に使う「ユーザー名」を確認する（推測禁止）
+
+SSH で使うユーザー名は、  
+**GCP のブラウザ SSH 画面に表示されている名前をそのまま使います。**
+
+#### 確認方法（この方法以外は使わない）
+
+1. GCP Console → **Compute Engine → VM インスタンス**
+2. 対象インスタンスの行の **「SSH」** ボタンをクリック
+3. ブラウザで SSH 画面が開く
+
+画面左側に、必ず次の形式で表示されます。
+
+```
+<SSHユーザー名>@<インスタンス名>:~$
+```
+
+例：
+```
+abc123@gcp-discord-bot:~$
+````
+
+- `abc123` ← **これが SSH ユーザー名**
+- `gcp-discord-bot` ← サーバー名（SSHコマンドでは使いません）
+
+👉 この **`<SSHユーザー名>` を必ずメモ**してください。
+
+---
+
+## ステップ3：ローカルPCから SSH 接続を実行する
+
+ここからは **ローカルPC（あなたのPC）で実行**します。
+
+### 🪟 Windows（PowerShell）
 
 ```powershell
-ssh -i $env:USERPROFILE\.ssh\gcp-discord-bot <ユーザー名>@<外部IP>
-```
+ssh -i $env:USERPROFILE\.ssh\gcp-discord-bot <SSHユーザー名>@<外部IP>
+````
 
-**実際の例：**
-```powershell
-ssh -i $env:USERPROFILE\.ssh\gcp-discord-bot discord_bot@34.84.123.456
-```
-
-**💡 コマンドの意味：**
-- `ssh`：SSH接続コマンド
-- `-i $env:USERPROFILE\.ssh\gcp-discord-bot`：使用する秘密鍵のパス
-- `discord_bot@34.84.123.456`：ユーザー名@サーバーのIPアドレス
-
-</details>
-
-<details>
-<summary><strong>🍎 Mac の場合</strong></summary>
-
-**ローカルPC（Mac ターミナル）で実行：**
+### 🍎 Mac（ターミナル）
 
 ```bash
-ssh -i ~/.ssh/gcp-discord-bot <ユーザー名>@<外部IP>
+ssh -i ~/.ssh/gcp-discord-bot <SSHユーザー名>@<外部IP>
 ```
 
-**実際の例：**
-```bash
-ssh -i ~/.ssh/gcp-discord-bot discord_bot@34.84.123.456
-```
-
-**💡 コマンドの意味：**
-- `ssh`：SSH接続コマンド
-- `-i ~/.ssh/gcp-discord-bot`：使用する秘密鍵のパス
-- `discord_bot@34.84.123.456`：ユーザー名@サーバーのIPアドレス
-
-</details>
+※ `<SSHユーザー名>` と `<外部IP>` は
+　**ステップ2で確認した自分の値に必ず置き換えてください。**
 
 ---
 
-#### ステップ3：初回接続時の確認
+### ステップ4：初回接続時の確認（必ず出る・正常）
 
-**初めて接続するときは、次のような確認メッセージが表示されます：**
+初回のみ、次の確認が表示されます。
 
 ```
-The authenticity of host '34.84.123.456 (34.84.123.456)' can't be established.
+Are you sure you want to continue connecting (yes/no)?
+```
+
+これはエラーではありません。
+
+* `yes` と入力
+* Enter を押す
+
+---
+
+### ステップ5：接続成功の確認
+
+次のような表示になれば成功です。
+
+```
+Welcome to Ubuntu 22.04 LTS
+<SSHユーザー名>@gcp-discord-bot:~$
+```
+
+この状態で、**サーバーの中に入っています。**
+
+---
+
+### ステップ6：sudo が使えるかを必ず確認する
+
+**サーバー側（SSH 接続中）で実行：**
+
+```bash
+sudo apt update
+```
+
+* パスワードを求められたら入力
+* エラーが出なければ OK
+
+これが通れば、
+**以降の手順で sudo に詰まることはありません。**
+
+---
+
+## トラブルシューティング（ここだけ確認）
+
+### `is not in the sudoers file` が出る場合
+
+* GCP IAM に **Compute OS Admin Login** が付いていません
+* IAM を確認 → 付与 → SSH し直してください
+
+### `Permission denied (publickey)` が出る場合
+
+* ユーザー名が違う
+* 秘密鍵のパスが違う
+
+必ず **GCP のブラウザ SSH に表示されたユーザー名**を使ってください。
+
+---
+
+ここまで終われば、
+**SSH 接続・sudo 権限ともに準備完了**です。
+次の章から、サーバー内での作業に進みます。
+
+### ★Linuxユーザーパスワードの設定(重要)
+
+👉 サーバー側で「Linuxユーザーのパスワードを設定する」
+
+いま GCP のブラウザ SSH には入れているので、
+そこでそのまま実行します。
+
+手順：ユーザーのパスワードを設定
+```
+sudo passwd ＜ユーザー名＞
+```
+
+すると次のように出ます。
+```
+New password:
+Retype new password:
+```
+
+ここで：
+自分で決めたパスワードを入力
+入力中は何も表示されません（正常）
+2回同じものを入力
+
+成功すると：
+```
+passwd: password updated successfully
+```
+
+と表示されます。
+
+そのあと、もう一度 sudo を試す
+```
+sudo apt update
+```
+
+今度は：
+```
+[sudo] password for ＜ユーザー名＞:
+```
+
+→ さきほど設定したパスワードを入力
+
+→ 正常に通ります。
+
+
+### SSH接続コマンド（ローカルPCから実行）
+
+ここからは **ローカルPC側**で実行します。
+
+#### 🪟 Windows（PowerShell）
+
+```powershell
+ssh -i $env:USERPROFILE\.ssh\gcp-discord-bot <SSHユーザー名>@34.104.123.456
+````
+
+#### 🍎 Mac（ターミナル）
+
+```bash
+ssh -i ~/.ssh/gcp-discord-bot <SSHユーザー名>@34.104.123.456
+```
+
+※ `<SSHユーザー名>` と `34.104.123.456` は **あなた自身の環境の値**に置き換えてください。
+
+---
+
+### 初回接続時に表示される確認（正常）
+
+初回のみ、次の表示が出ます。
+
+```text
+Are you sure you want to continue connecting (yes/no)?
+```
+
+これは **正常な確認メッセージ**です。
+
+* `yes` と入力
+* Enter を押す
+
+---
+
+### 接続成功の確認
+
+次のような表示になれば成功です。
+
+```
+<SSHユーザー名>@<SSHユーザー名>
+```
+
+この状態になったら、
+**ローカルPC → サーバーへのSSH接続は完了**です。
+
+以降の作業は、この画面（サーバー側）で行います。
+
+
+---
+
+#### ステップ3：初回接続時の確認（必ず表示される）
+
+**はじめてそのサーバーに接続すると、次のような確認メッセージが表示されます。**
+
+```
+
+The authenticity of host '<外部IP> (<外部IP>)' can't be established.
 ED25519 key fingerprint is SHA256:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX.
 Are you sure you want to continue connecting (yes/no/[fingerprint])?
+
 ```
 
-**💡 これは何？：**
-- 初めて接続するサーバーなので、「本当にこのサーバーでいいですか？」と確認しています
-- セキュリティのための確認です
+**これは何かというと：**
 
-**→ `yes` とタイプして Enter を押してください**
+- まだ一度も接続したことがないサーバーなので  
+  「このサーバーに本当に接続しますか？」と SSH が確認しています
+- エラーではなく、**初回のみ必ず出る正常な確認メッセージ**です
+
+**対応：**
+
+```
+yes
+```
+
+と入力して、**Enter** を押してください。
+
+※ `y` ではなく、**`yes` と全部入力**します。
 
 ---
 
 #### ステップ4：接続成功の確認
 
-**✅ 接続に成功すると、次のように表示されます：**
+**正しく接続できると、次のような表示が出ます。**
 
 ```
-Welcome to Ubuntu 22.04.3 LTS (GNU/Linux 5.15.0-1035-gcp x86_64)
 
- * Documentation:  https://help.ubuntu.com
- * Management:     https://landscape.canonical.com
- * Support:        https://ubuntu.com/advantage
+Welcome to Ubuntu 22.04 LTS (GNU/Linux x86_64)
 
 Last login: Tue Feb 03 12:34:56 2026 from xxx.xxx.xxx.xxx
-discord_bot@discord-bot-instance:~$
+<SSHユーザー名>@<インスタンス名>:~$
+
 ```
 
-**💡 表示の意味：**
-- `Welcome to Ubuntu...`：サーバーのOSとバージョン
-- `discord_bot@discord-bot-instance`：ログインユーザー名@サーバー名
-- `~$`：ホームディレクトリにいることを示す（`~` = `/home/discord_bot`）
+**表示の見方：**
 
-**これでサーバーの中にいます！**
+- `Welcome to Ubuntu ...`  
+  → サーバーの OS（Ubuntu）とバージョン情報
+- `<SSHユーザー名>@<インスタンス名>`  
+  → どのユーザーで、どのサーバーにログインしているか
+- `~$`  
+  → ユーザーのホームディレクトリにいることを示す  
+    （`~` は `/home/<SSHユーザー名>` を意味します）
 
----
+この表示になっていれば、  
+**ローカルPCからサーバーへの SSH 接続は成功**しています。
+
+このあとの作業は、すべてこの画面（サーバー側）で行います。
+
 
 #### トラブルシューティング
 
@@ -785,105 +975,209 @@ pm2 -v
 
 ### 3-4. Git のインストール
 
+この章では、**サーバー上で Git を使えるようにします。**  
+Git は、GitHub に置いてある Bot のコードを **サーバーに持ってくるための道具**です。
+
+※ ここでいう Git は、  
+あなたのPC（Windows / Mac）に入れた Git とは **別物**です。  
+**サーバーにも Git を入れる必要があります。**
+
+---
+
+#### Git をインストールする
+
 **⚠️ サーバーで実行：**
 
 ```bash
 sudo apt install -y git
-```
+````
 
-**💡 Gitの役割：**
-- GitHubからあなたのBotのコードをダウンロード（クローン）する
-- コードの更新を取得する
+**このコマンドでやっていること：**
+
+* `sudo`：管理者権限で実行
+* `apt`：Ubuntu のソフト管理コマンド
+* `install git`：Git をインストール
+* `-y`：途中の確認を自動で「yes」にする
+
+数秒〜数十秒で完了します。
 
 ---
 
-#### Gitのバージョン確認
+#### Git のバージョン確認
+
+インストールできたかを確認します。
 
 ```bash
 git --version
 ```
 
-**✅ 正しくインストールされていれば：**
+**正しくインストールされていれば、次のように表示されます：**
+
 ```
-git version 2.34.1
+git version 2.xx.x
 ```
 
----
-
-**🎯 第3章で完了したこと：**
-- ✅ システムの更新
-- ✅ Node.js 20.x のインストール
-- ✅ PM2 のインストール
-- ✅ Git のインストール
-
-サーバーがBotを実行できる環境になりました！
+（数字は多少違っていて問題ありません）
 
 ---
 
-## 第4章：Bot のデプロイ（20分）
+### この時点でサーバーに入っているもの
 
-この章では、GitHubに保存されているあなたのBotのコードをサーバーにダウンロードし、実行します。
+ここまでで、サーバーには次の環境がそろいました。
 
-**⚠️ すべてサーバーで実行します**
+* Node.js（Botを動かすため）
+* PM2（Botを常駐させるため）
+* Git（GitHubからコードを取得するため）
+
+**＝ Bot を動かす「土台」は完成**です。
 
 ---
 
-### 4-1. GitHub からコードをクローン
+## 第4章：Bot のデプロイ（サーバーにコードを置く）
 
-#### ステップ1：ホームディレクトリに移動
+この章では、  
+**GitHub に保存してある Bot のコードを、サーバー上に配置します。**
+
+ここから先の操作は、**すべて SSH で接続したサーバー上で実行**します。
+
+---
+
+### 4-1. GitHub からコードを取得する（clone）
+
+#### ステップ1：ホームディレクトリに移動する
 
 ```bash
 cd ~
-```
+````
 
-**💡 `~` の意味：**
-- ホームディレクトリを表す記号
-- `/home/discord_bot` と同じ意味
+**この操作の意味：**
 
----
+* `~` は「現在ログインしているユーザーのホームディレクトリ」を表します
+* 例：`/home/<SSHユーザー名>`
 
-#### ステップ2：リポジトリをクローン
-
-```bash
-git clone https://github.com/<あなたのユーザー名>/git_practice.git
-```
-
-**実際の例：**
-```bash
-git clone https://github.com/taro-yamada/git_practice.git
-```
-
-**💡 クローンとは：**
-- GitHubに保存されているコードを、サーバーにコピーすること
-- ローカルで開発したコードが、そのままサーバーにダウンロードされます
-
-**✅ 成功すると次のように表示されます：**
-```
-Cloning into 'git_practice'...
-remote: Enumerating objects: 123, done.
-remote: Counting objects: 100% (123/123), done.
-...
-```
+Bot のプロジェクトは、このホームディレクトリ直下に置くのが分かりやすく、安全です。
 
 ---
 
-#### ステップ3：プロジェクトディレクトリに移動
+#### ステップ2：GitHub に接続できる状態か確認する（重要）
+
+この教材では、
+**GitHub のリポジトリを Private（非公開）のまま使用**します。
+
+そのため、サーバーから GitHub に接続するには
+**SSH 鍵による認証設定**が必要です。
+
+次のコマンドを実行してください。
 
 ```bash
-cd git_practice
+ssh -T git@github.com
 ```
 
-**現在地の確認：**
+**正しく設定できている場合、次のように表示されます：**
+
+```
+Hi <GitHubユーザー名>! You've successfully authenticated, but GitHub does not provide shell access.
+```
+
+この表示が出れば、
+**サーバー → GitHub の接続準備は完了**しています。
+
+※ もしここでエラーが出る場合は、
+前の章に戻って「SSH 公開鍵を GitHub に登録する」手順を先に完了させてください。
+
+---
+
+#### ステップ3：リポジトリをクローンする
+
+次に、Bot のコードをサーバーにコピーします。
+
+```bash
+git clone git@github.com:<ユーザー名>/bot_practice.git
+```
+
+**このコマンドで行っていること：**
+
+* GitHub 上の `bot_practice` リポジトリを
+* 現在のディレクトリ（ホーム）に丸ごとコピーする
+
+---
+
+#### クローン成功時の表示
+
+次のような出力が表示されます。
+
+```
+Cloning into 'bot_practice'...
+remote: Enumerating objects: ...
+remote: Counting objects: 100% ...
+Receiving objects: 100% ...
+```
+
+この表示が出れば、クローンは成功です。
+
+---
+
+#### ステップ4：フォルダが作成されたか確認する
+
+```bash
+ls
+```
+
+一覧に次のフォルダが表示されていればOKです。
+
+```
+bot_practice
+```
+
+---
+
+#### ステップ5：Bot のプロジェクトフォルダに移動する
+
+```bash
+cd bot_practice
+```
+
+現在地を確認します。
+
 ```bash
 pwd
 ```
 
-**✅ 次のように表示されれば正しい場所にいます：**
+**次のように表示されれば正しい場所にいます：**
+
 ```
-/home/discord_bot/git_practice
+/home/<SSHユーザー名>/bot_practice
 ```
 
 ---
+
+#### ステップ6：プロジェクトの中身を確認する
+
+```bash
+ls
+```
+
+次のようなファイルやフォルダが見えていれば問題ありません。
+
+```
+package.json
+package-lock.json
+src
+commands
+README.md
+```
+
+---
+
+ここまでで、
+
+* GitHub からサーバーへのコード取得
+* Bot プロジェクトの配置
+
+が完了しました。
+
+次の章では、
+このフォルダ内で **依存関係のインストール（npm install）** を行います。
 
 ### 4-2. 依存パッケージのインストール
 
