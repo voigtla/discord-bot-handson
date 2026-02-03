@@ -309,7 +309,7 @@ MIT License
 ## 連絡先
 
 問題があれば Issue を作成してください。
-```
+
 
 ---
 
@@ -323,7 +323,6 @@ MIT License
 
 `COMMANDS.md` を作成：
 
-```markdown
 # コマンドリファレンス
 
 ## ユーザーコマンド
@@ -425,7 +424,7 @@ Discord で：
 4. 必要なら `pm2 restart discord-bot`
 
 ...
-```
+
 
 ---
 
