@@ -1,357 +1,755 @@
-# 第14回：本番で何か起きたとき、最初に見る場所を決める
+# 第14回：ログによる調査の基礎体力
 
-―― ログがないと、判断はできない ――
+「Botが動かない...なんで？」
 
-「Bot が動かない」
-「なんか遅い」
-「エラーは出てない“らしい”」
+その答えは、**ログの中**にあります。
 
-この状態でコードを触り始めるのは、
-**暗闇で目隠しして修理する**のと同じです。
-
-この回では、
-**“原因を当てる”のではなく、“状況を観測する”**
-ことだけをやります。
+この回では、pm2 logsを使った調査方法と、適切なログの追加・削除を学びます。
 
 ---
 
 ## 📌 この回の目標
 
-* 本番トラブル時に **最初に見る場所**が分かる
-* 「ログが足りない」状態を自分で作って改善できる
-* **直す前に、状況を説明できる**ようになる
+- pm2 logs を使いこなせるようになる
+- ログからエラーの原因を特定できる
+- 適切なログを追加・削除できる
 
-**💡 この回の約束**
-
-* 原因究明しない
-* いきなり修正しない
-* 推測しない
-
-👉 **観測だけ**します。
+**💡 ポイント：**
+- ログは「証拠」
+- エラーメッセージを恐れない
+- ログは多すぎても少なすぎてもダメ
 
 ---
 
 ## 🎯 完成イメージ
 
 ```
-【Before】
-Bot が動かない…
-たぶんここが怪しい？
-→ 勘で修正 → さらに悪化
+【ログがないと】
+「Botが動かない...」
+→ 何が起きているか分からない
+→ 手当たり次第に確認
+→ 時間がかかる
 
-【After】
-Bot が動かない
-→ ログを見る
-→ どこまで動いているか分かる
-→ 判断できる
+【ログがあると】
+「Botが動かない...」
+→ pm2 logs を確認
+→ エラーメッセージ発見
+→ 「あ、API_KEYが間違ってる」
+→ 5分で解決
 ```
 
 ---
 
-## 第1章：「ログがない」と何もできない（10分）
+## 第1章：ログとは何か（10分）
 
-### 1-1. よくある“最悪の状況”
+### 1-1. ログの役割
 
+**ログ（Log）：**
+- プログラムの「実行記録」
+- 何が起きたかを時系列で記録する
+- エラーやデバッグ情報を残す
+
+**ログがないと：**
 ```
-Bot が反応しない
-↓
-サーバーに入る
-↓
-pm2 restart
-↓
-まだ動かない
-↓
-コードを修正
-↓
-もっと壊れる
+Bot起動 → 何か処理 → エラー発生 → 停止
+→ 「何が起きたか」が分からない
 ```
 
-**この流れの共通点：**
-
-> **何も見ていない**
-
----
-
-### 1-2. ログの役割は「原因を教える」ではない
-
-ログはこういうものです。
-
-> **「ここまでは動いていた」
-> 「ここで止まっている」
-> を教えるもの**
-
-* 正解は出さない
-* 修正方法も教えない
-
-でも、
-
-> **次の一手を“判断できる状態”にする**
-
-これがログの価値です。
-
----
-
-## 第2章：本番で最初に見る3点（15分）
-
-### 2-1. 見る順番は固定
-
-トラブル時、**この順番以外は見ない**。
-
+**ログがあると：**
 ```
-① pm2 の状態
-② pm2 のログ
-③ アプリのログ
+Bot起動 → ログ：「Botが起動しました」
+       → ログ：「データベース接続中...」
+       → ログ：「エラー：DATABASE_PATH が設定されていません」
+       → 停止
+
+→ 「DATABASE_PATH の設定ミス」と分かる
 ```
 
 ---
 
-### ① pm2 の状態を見る
+### 1-2. ログの種類
+
+**一般的なログレベル：**
+
+```
+DEBUG（デバッグ）
+  ↓ 詳細な情報（開発時のみ）
+INFO（情報）
+  ↓ 通常の動作ログ
+WARN（警告）
+  ↓ 注意が必要だが、動作は継続
+ERROR（エラー）
+  ↓ エラーが発生、機能が停止
+FATAL（致命的）
+  ↓ プログラム全体が停止
+```
+
+**例：**
+
+```javascript
+log('debug', 'データベースクエリ: SELECT * FROM feelings');  // 開発時のみ
+log('info', 'Botがログインしました');                      // 通常の動作
+log('warn', 'API制限に近づいています（残り10%）');          // 警告
+log('error', 'データベース接続に失敗しました');             // エラー
+```
+
+---
+
+## 第2章：pm2 logs の使い方（15分）
+
+### 2-1. 基本的なログ確認
+
+**サーバーにSSH接続：**
 
 ```bash
-pm2 status
+ssh -i ~/.ssh/gcp-discord-bot discord_bot@<サーバーのIP>
 ```
-
-**見るポイント**
-
-* online / stopped / errored
-* 再起動ループしていないか
-* 想定のアプリ名か
-
-👉 **ここで止まっていたら、ログを見る前に理由がある**
 
 ---
 
-### ② pm2 のログを見る
+#### コマンド1：リアルタイムでログを見る
 
 ```bash
-pm2 logs discord-bot --lines 50
-```
-
-**見るポイント**
-
-* 最後に出たログ
-* エラーが出ているか
-* 同じ行がループしていないか
-
-👉 **上から全部読まない。最後から読む。**
-
----
-
-### ③ アプリのログを見る（自分が出したもの）
-
-第12回で作った `log()` 関数のログが対象です。
-
-```
-[INFO] 初期テンプレート準備完了
-[INFO] Discord にログインしました
-```
-
-**ここで分かること**
-
-* 起動しているか
-* どこまで進んだか
-
----
-
-## 第3章：ログが足りない状態を体験する（15分）
-
-### 3-1. わざと「何も分からない」状態を作る
-
-#### ステップ1：ログを全部消す
-
-```js
-// console.log や log() を全部コメントアウト
-```
-
-#### ステップ2：Bot を起動
-
-```bash
-pm2 restart discord-bot
 pm2 logs discord-bot
 ```
 
-**結果：**
+**出力例：**
 
 ```
-（ほぼ何も出ない）
+0|discord  | [INFO] 環境: production
+0|discord  | [INFO] データベース: ./bot.db
+0|discord  | [INFO] ログレベル: info
+0|discord  | [INFO] データベース準備完了
+0|discord  | [INFO] 初期テンプレート準備完了
+0|discord  | [INFO] discord-bot でログインしました！
+```
+
+**💡 ポイント：**
+- リアルタイムで更新される
+- `Ctrl + C` で終了
+
+---
+
+#### コマンド2：過去のログを見る
+
+```bash
+pm2 logs discord-bot --lines 100
+```
+
+**💡 ポイント：**
+- 過去100行のログを表示
+- `--lines 50` で50行、など調整可能
+
+---
+
+#### コマンド3：エラーログだけを見る
+
+```bash
+pm2 logs discord-bot --err
+```
+
+**💡 ポイント：**
+- エラーログのみ表示
+- トラブル調査時に便利
+
+---
+
+#### コマンド4：ログをクリア
+
+```bash
+pm2 flush discord-bot
+```
+
+**💡 ポイント：**
+- 古いログを削除
+- ディスク容量の節約
+
+---
+
+### 2-2. ログファイルの場所
+
+**PM2のログファイル：**
+
+```bash
+# ログファイルの場所を確認
+pm2 info discord-bot
+```
+
+**出力例：**
+
+```
+│ log path              │ /home/discord_bot/.pm2/logs/discord-bot-out.log     │
+│ error log path        │ /home/discord_bot/.pm2/logs/discord-bot-error.log   │
+```
+
+**直接ファイルを見る：**
+
+```bash
+# 標準出力ログ
+tail -f ~/.pm2/logs/discord-bot-out.log
+
+# エラーログ
+tail -f ~/.pm2/logs/discord-bot-error.log
 ```
 
 ---
 
-### 3-2. この状態で起きること
+## 第3章：エラーログを読む（20分）
 
-* Bot が動かない理由が分からない
-* DBか？APIか？Discordか？
-* **何も判断できない**
+### 3-1. エラーログの構造
 
-👉 これが
-**「ログがない本番」**。
+**典型的なエラーログ：**
+
+```
+2026-02-04 15:30:45 | [ERROR] データベース接続エラー
+Error: ENOENT: no such file or directory, open './bot.db'
+    at Object.openSync (fs.js:497:3)
+    at Object.readFileSync (fs.js:393:35)
+    at Database (~/git_practice/node_modules/better-sqlite3/lib/database.js:48:29)
+    at Object.<anonymous> (~/git_practice/index.js:8:12)
+    at Module._compile (internal/modules/cjs/loader.js:1085:14)
+    at Object.Module._extensions..js (internal/modules/cjs/loader.js:1114:10)
+```
+
+**読み方：**
+
+1. **エラーメッセージ：**
+   ```
+   Error: ENOENT: no such file or directory, open './bot.db'
+   ```
+   → 意味：`./bot.db` というファイルが見つからない
+
+2. **スタックトレース（どこでエラーが起きたか）：**
+   ```
+   at Object.<anonymous> (~/git_practice/index.js:8:12)
+   ```
+   → 意味：`index.js` の8行目12文字目でエラー
 
 ---
 
-## 第4章：最低限必要なログを入れる（20分）
+### 3-2. よくあるエラーと読み方
 
-### 4-1. ログは“全部”いらない
+#### エラー1：モジュールが見つからない
 
-この回で入れるログは **5か所だけ**。
+**ログ：**
+```
+Error: Cannot find module 'moment'
+```
 
----
+**意味：**
+- `moment` というライブラリがインストールされていない
 
-### ① 起動開始
-
-```js
-log('info', 'Bot 起動開始');
+**解決方法：**
+```bash
+npm install moment
+pm2 restart discord-bot
 ```
 
 ---
 
-### ② DB 初期化完了
+#### エラー2：環境変数が設定されていない
 
-```js
-log('info', 'DB 初期化完了');
+**ログ：**
+```
+[ERROR] GEMINI_API_KEY が設定されていません
+```
+
+**意味：**
+- `.env` に `GEMINI_API_KEY` がない
+
+**解決方法：**
+```bash
+# .env を確認
+cat .env
+
+# GEMINI_API_KEY を追加
+nano .env
+# GEMINI_API_KEY=あなたのAPIキー を追加
+
+# 再起動
+pm2 restart discord-bot
 ```
 
 ---
 
-### ③ Discord ログイン完了
+#### エラー3：構文エラー
 
-```js
-client.once('ready', () => {
-  log('info', `Discord ログイン完了: ${client.user.tag}`);
+**ログ：**
+```
+SyntaxError: Unexpected token ','
+    at index.js:25:10
+```
+
+**意味：**
+- `index.js` の25行目にカンマの書き間違いがある
+
+**解決方法：**
+1. ローカルPCで `index.js` の25行目を確認
+2. 修正
+3. コミット・プッシュ
+4. デプロイ
+
+---
+
+#### エラー4：API制限
+
+**ログ：**
+```
+[ERROR] Gemini API エラー: 429 Too Many Requests
+```
+
+**意味：**
+- Gemini APIのリクエスト制限を超えた
+
+**解決方法：**
+- しばらく待つ
+- または API制限を緩和する設定を追加
+
+---
+
+### 3-3. エラー調査の手順
+
+**手順1：ログを見る**
+```bash
+pm2 logs discord-bot --err --lines 50
+```
+
+**手順2：エラーメッセージを特定**
+- エラーメッセージの一番上を読む
+- 何が起きているかを理解する
+
+**手順3：スタックトレースから場所を特定**
+- どのファイルの何行目でエラーが起きたか
+- `index.js:25:10` → 25行目を見る
+
+**手順4：原因を推測**
+- 環境変数の問題？
+- ライブラリの問題？
+- コードの問題？
+
+**手順5：修正・検証**
+- 修正を加える
+- 再起動して確認
+
+---
+
+## 第4章：適切なログを追加する（15分）
+
+### 4-1. どこにログを追加すべきか
+
+**追加すべき場所：**
+
+1. **プログラムの開始時**
+   ```javascript
+   console.log('[INFO] Botを起動中...');
+   ```
+
+2. **重要な処理の前後**
+   ```javascript
+   console.log('[INFO] データベースに接続中...');
+   const db = new Database(dbPath);
+   console.log('[INFO] データベース接続完了');
+   ```
+
+3. **エラーが発生しそうな場所**
+   ```javascript
+   try {
+     const result = await aiHelper.chat(message);
+   } catch (error) {
+     console.log('[ERROR] AI応答エラー:', error.message);
+   }
+   ```
+
+4. **ユーザーアクション**
+   ```javascript
+   console.log(`[INFO] ユーザー ${interaction.user.tag} が /feeling を実行`);
+   ```
+
+---
+
+### 4-2. ログを追加する実践
+
+**ローカルPCで作業：**
+
+**index.js の各コマンド実行時にログを追加：**
+
+**現在のコード（例）：**
+
+```javascript
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isCommand()) return;
+
+  const { commandName } = interaction;
+
+  if (commandName === 'feeling') {
+    // 処理...
+  }
+});
+```
+
+**ログ追加後：**
+
+```javascript
+const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
+
+function log(level, message) {
+  const levels = { debug: 0, info: 1, warn: 2, error: 3 };
+  const currentLevel = levels[LOG_LEVEL] || 1;
+  const messageLevel = levels[level] || 1;
+  
+  if (messageLevel >= currentLevel) {
+    const timestamp = new Date().toISOString();
+    console.log(`${timestamp} | [${level.toUpperCase()}] ${message}`);
+  }
+}
+
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isCommand()) return;
+
+  const { commandName } = interaction;
+  
+  log('info', `コマンド実行: ${commandName} by ${interaction.user.tag}`);
+
+  if (commandName === 'feeling') {
+    try {
+      // 処理...
+      log('debug', `気分記録: ユーザー${interaction.user.id}, 気分: ${feeling}`);
+    } catch (error) {
+      log('error', `気分記録エラー: ${error.message}`);
+      await interaction.reply({
+        content: 'エラーが発生しました。',
+        ephemeral: true
+      });
+    }
+  }
 });
 ```
 
 ---
 
-### ④ コマンド受付
+### 4-3. ログの良い例・悪い例
 
-```js
-client.on('interactionCreate', async interaction => {
-  log('debug', `コマンド受信: ${interaction.commandName}`);
+**❌ 悪い例：ログが多すぎる**
+
+```javascript
+console.log('関数開始');
+console.log('変数aを定義');
+console.log('変数bを定義');
+console.log('a + b を計算');
+console.log('結果を返す');
+console.log('関数終了');
+```
+
+**問題点：**
+- ログが多すぎて重要な情報が埋もれる
+- パフォーマンスに影響
+
+---
+
+**✅ 良い例：必要最小限のログ**
+
+```javascript
+log('debug', `計算開始: a=${a}, b=${b}`);
+const result = a + b;
+log('debug', `計算完了: result=${result}`);
+```
+
+**メリット：**
+- 必要な情報だけが残る
+- 読みやすい
+
+---
+
+**❌ 悪い例：ログレベルが不適切**
+
+```javascript
+console.log('[ERROR] Bot起動しました');  // ← 起動はエラーじゃない
+```
+
+**✅ 良い例：適切なログレベル**
+
+```javascript
+log('info', 'Bot起動しました');
+```
+
+---
+
+### 4-4. センシティブ情報をログに出さない
+
+**❌ 危険な例：**
+
+```javascript
+console.log(`APIキー: ${process.env.GEMINI_API_KEY}`);
+console.log(`ユーザーのメッセージ: ${message.content}`);
+```
+
+**問題点：**
+- APIキーがログに残る → セキュリティリスク
+- ユーザーの個人情報がログに残る → プライバシー問題
+
+**✅ 安全な例：**
+
+```javascript
+log('debug', `APIリクエスト送信（キー: ${process.env.GEMINI_API_KEY.substring(0, 4)}****）`);
+log('debug', `メッセージ受信（長さ: ${message.content.length}文字）`);
+```
+
+---
+
+## 第5章：ログのメンテナンス（10分）
+
+### 5-1. ログローテーション
+
+**PM2のログローテーション設定：**
+
+**サーバーで実行：**
+
+```bash
+# pm2-logrotateをインストール
+pm2 install pm2-logrotate
+
+# 設定を確認
+pm2 conf pm2-logrotate
+```
+
+**推奨設定：**
+
+```bash
+# 1日1回ローテーション
+pm2 set pm2-logrotate:rotateInterval '0 0 * * *'
+
+# 10MBでローテーション
+pm2 set pm2-logrotate:max_size 10M
+
+# 7日分保存
+pm2 set pm2-logrotate:retain 7
+
+# 古いログを圧縮
+pm2 set pm2-logrotate:compress true
+```
+
+---
+
+### 5-2. 不要なログの削除
+
+**開発時のデバッグログを削除：**
+
+**ローカルPCで作業：**
+
+```javascript
+// ❌ 削除すべきログ
+console.log('デバッグ：ここを通過');
+console.log('変数の値:', someVariable);
+console.log('=== テスト中 ===');
+
+// ✅ 残すべきログ
+log('info', 'Bot起動しました');
+log('error', `エラー: ${error.message}`);
+```
+
+**削除の基準：**
+- 開発時のデバッグ用 → 削除
+- 本番で必要な情報 → 残す
+
+---
+
+### 5-3. ログ監視の自動化（応用）
+
+**PM2のログ監視機能：**
+
+```bash
+# エラーが出たらメール送信（要設定）
+pm2 set pm2-logrotate:workerInterval 30
+```
+
+**応用：Discordに通知**
+
+```javascript
+// エラー時にDiscordチャンネルに通知
+process.on('uncaughtException', async (error) => {
+  log('error', `致命的エラー: ${error.message}`);
+  
+  // 管理者用チャンネルに通知
+  const channel = client.channels.cache.get('管理者チャンネルID');
+  if (channel) {
+    await channel.send(`🚨 Botでエラーが発生しました:\n\`\`\`${error.message}\`\`\``);
+  }
+  
+  process.exit(1);
 });
 ```
-
----
-
-### ⑤ エラー捕捉
-
-```js
-process.on('uncaughtException', err => {
-  log('error', `未捕捉エラー: ${err.message}`);
-});
-```
-
----
-
-### 4-2. これで分かること
-
-```
-Bot 起動開始
-DB 初期化完了
-Discord ログイン完了
-```
-
-* ここまで出ていれば **起動OK**
-* 出ていなければ **その手前が原因**
-
-👉 **原因を当てなくていい**
-
----
-
-## 第5章：ログを使った“判断”演習（15分）
-
-### ケース1：DB 初期化で止まる
-
-```
-Bot 起動開始
-（DB 初期化完了が出ない）
-```
-
-**判断できること**
-
-* DB 周りが怪しい
-* Discord や API ではない
-
----
-
-### ケース2：ログインで止まる
-
-```
-Bot 起動開始
-DB 初期化完了
-（ログイン完了が出ない）
-```
-
-**判断できること**
-
-* TOKEN / 権限 / Discord 側
-* コード修正は不要かもしれない
-
----
-
-### ケース3：コマンドが反応しない
-
-```
-ログイン完了
-（コマンド受信ログが出ない）
-```
-
-**判断できること**
-
-* コマンド登録
-* ギルドID
-* 権限設定
-
-👉 **この時点で“直す場所”が絞れる**
-
----
-
-## 第6章：この回でやらないこと（重要）
-
-この回では **絶対にやらない**：
-
-* 原因の特定
-* 修正
-* 最適化
-* ログを美しくする
-
-> **観測だけで終了してOK**
 
 ---
 
 ## ✅ この回のチェックリスト
 
-* [ ] トラブル時に見る順番が言える
-* [ ] pm2 status / logs を迷わず使える
-* [ ] ログが足りない怖さを体験した
-* [ ] 最低限のログを自分で入れた
-* [ ] 「直す前に判断する」感覚を持った
+- [ ] pm2 logs の基本コマンドを理解した
+- [ ] エラーログの読み方を理解した
+- [ ] スタックトレースから原因を特定できる
+- [ ] 適切な場所にログを追加できる
+- [ ] ログレベルの使い分けができる
+- [ ] センシティブ情報をログに出さない
 
 ---
 
-## 🎓 この回で得たもの
+## 🎓 この回で学んだこと
 
-* 勘で修正しなくなる
-* 「分からない」が言語化できる
-* AIに聞く前に **状況を説明できる**
+**最重要ポイント：**
+> **ログは「証拠」。エラーメッセージを恐れず、読んで理解する。**
 
-> **ログはデバッグのためではない
-> 判断のためにある**
+**具体的に学んだこと：**
+1. pm2 logs の使い方（リアルタイム・過去ログ・エラーログ）
+2. エラーログの読み方（メッセージ・スタックトレース）
+3. 適切なログの追加方法
+4. ログレベルの使い分け
+5. センシティブ情報の保護
 
 ---
 
 ## 📝 次回予告
 
-**第15回：やらかした時に“直さない”選択をする**
+**第15回：やらかした時に「直さない」生存戦略**
 
-次は、
+ログで原因が分かったとしても、**その場で修正するべきとは限りません。**
 
-* ログは見た
-* 原因も分かった
-* でも **今は直せない**
+次回は：
+- ロールバック（切り戻し）の判断
+- 再起動だけで解決する場合
+- 「直さない」という選択肢
 
-そんな時にどうするか。
+を学びます。
 
-> **「戻す」「止める」「放置する」**
+---
 
-を、実際に選びます。
+## 📦 この回の完成版ソースコード
+
+### index.js（ログ追加版）の抜粋
+
+```javascript
+require('dotenv').config();
+const { Client, GatewayIntentBits } = require('discord.js');
+const Database = require('better-sqlite3');
+const AIHelper = require('./ai-helper');
+const SpamDetector = require('./spam-detector');
+const ContentFilter = require('./content-filter');
+
+// 環境変数からデータベースパスを取得
+const dbPath = process.env.DATABASE_PATH || 'bot.db';
+const db = new Database(dbPath);
+
+// ログ関数
+const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
+
+function log(level, message) {
+  const levels = { debug: 0, info: 1, warn: 2, error: 3 };
+  const currentLevel = levels[LOG_LEVEL] || 1;
+  const messageLevel = levels[level] || 1;
+  
+  if (messageLevel >= currentLevel) {
+    const timestamp = new Date().toISOString();
+    console.log(`${timestamp} | [${level.toUpperCase()}] ${message}`);
+  }
+}
+
+// 環境情報を表示
+log('info', `環境: ${process.env.NODE_ENV || 'development'}`);
+log('info', `データベース: ${dbPath}`);
+log('info', `ログレベル: ${process.env.LOG_LEVEL || 'info'}`);
+
+// データベース準備
+log('debug', 'データベースの準備を開始');
+db.exec(`
+  CREATE TABLE IF NOT EXISTS feelings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    feeling TEXT NOT NULL,
+    note TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+log('info', 'データベース準備完了');
+
+// Discord Clientの作成
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ]
+});
+
+// AI Helper初期化
+const aiHelper = new AIHelper();
+log('debug', 'AI Helper初期化完了');
+
+// Spam Detector初期化
+const spamDetector = new SpamDetector(db);
+log('debug', 'Spam Detector初期化完了');
+
+// Content Filter初期化
+const contentFilter = new ContentFilter();
+log('debug', 'Content Filter初期化完了');
+
+// Bot起動時の処理
+client.once('ready', () => {
+  log('info', `${client.user.tag} でログインしました！`);
+});
+
+// コマンド実行時の処理
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isCommand()) return;
+
+  const { commandName } = interaction;
+  
+  log('info', `コマンド実行: /${commandName} by ${interaction.user.tag}`);
+
+  if (commandName === 'feeling') {
+    try {
+      const feeling = interaction.options.getString('気分');
+      const note = interaction.options.getString('メモ') || '';
+
+      log('debug', `気分記録: ユーザー${interaction.user.id}, 気分: ${feeling}`);
+
+      const stmt = db.prepare(`
+        INSERT INTO feelings (user_id, feeling, note)
+        VALUES (?, ?, ?)
+      `);
+      stmt.run(interaction.user.id, feeling, note);
+
+      await interaction.reply({
+        content: `今日の気分「${feeling}」を記録しました！`,
+        ephemeral: true
+      });
+
+      log('info', `気分記録成功: ${interaction.user.tag}`);
+    } catch (error) {
+      log('error', `気分記録エラー: ${error.message}`);
+      await interaction.reply({
+        content: 'エラーが発生しました。もう一度お試しください。',
+        ephemeral: true
+      });
+    }
+  }
+
+  // 他のコマンドも同様にログを追加...
+});
+
+// エラーハンドリング
+process.on('unhandledRejection', (error) => {
+  log('error', `未処理のPromise拒否: ${error.message}`);
+});
+
+process.on('uncaughtException', (error) => {
+  log('error', `致命的エラー: ${error.message}`);
+  process.exit(1);
+});
+
+// Botログイン
+client.login(process.env.DISCORD_TOKEN);
+```
+
+---
+
+これで第14回は完了です！
+
+次回（第15回）では、ロールバックの判断を学びます。
