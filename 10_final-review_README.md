@@ -222,7 +222,7 @@ sudo netstat -tuln
 
 プロジェクトルートに `README.md` を作成：
 
-```markdown
+~~~markdown
 # Discord Bot - メンタルサポート
 
 メンタル系サーバー向けのチャットボット
@@ -310,6 +310,8 @@ MIT License
 
 問題があれば Issue を作成してください。
 
+~~~~
+
 
 ---
 
@@ -322,7 +324,7 @@ MIT License
 
 
 `COMMANDS.md` を作成：
-
+~~~md
 # コマンドリファレンス
 
 ## ユーザーコマンド
@@ -361,7 +363,7 @@ MIT License
 - 気分の内訳
 
 ...（以下、全コマンドの詳細）
-```
+~~~
 
 ---
 
@@ -369,7 +371,7 @@ MIT License
 
 `OPERATIONS.md` を作成：
 
-```markdown
+~~~markdown
 # 運用マニュアル
 
 ## 日常の運用
@@ -424,7 +426,7 @@ Discord で：
 4. 必要なら `pm2 restart discord-bot`
 
 ...
-
+~~~
 
 ---
 
@@ -746,7 +748,7 @@ git_practice/
 
 **プロジェクトの説明文書：**
 
-```markdown
+~~~markdown
 # メンタルヘルスサポート Discord Bot
 
 メンタル系サーバー向けの支援Botです。
@@ -816,7 +818,7 @@ node index.js
 ## ライセンス
 
 MIT License
-```
+~~~
 
 ---
 
@@ -824,7 +826,7 @@ MIT License
 
 **コマンドリファレンス：**
 
-```markdown
+~~~markdown
 # コマンドリファレンス
 
 ## ユーザー向けコマンド
