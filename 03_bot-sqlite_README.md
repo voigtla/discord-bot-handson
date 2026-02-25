@@ -241,34 +241,30 @@ const { REST, Routes } = require('discord.js');
 
 // ※この配列は、次の章で内容を置き換えます
 const commands = [
-  {
-    name: 'hello',
-    description: '挨拶します'
-  }
+    {
+        name: 'hello',
+        description: '挨拶します'
+    }
 ];
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
 
 (async () => {
-  try {
-    console.log('コマンドを登録中...');
-    
-    await rest.put(
-      await rest.put(
-  Routes.applicationGuildCommands(
-    process.env.CLIENT_ID,
-    process.env.GUILD_ID
-  ),
-  { body: commands }
-);
-,
-      { body: commands }
-    );
-    
-    console.log('コマンド登録完了！');
-  } catch (error) {
-    console.error(error);
-  }
+    try {
+        console.log('コマンドを登録中...');
+
+        await rest.put(
+            Routes.applicationGuildCommands(
+                process.env.CLIENT_ID,
+                process.env.GUILD_ID
+            ),
+            { body: commands }
+        );
+
+        console.log('コマンド登録完了！');
+    } catch (error) {
+        console.error(error);
+    }
 })();
 ````
 
